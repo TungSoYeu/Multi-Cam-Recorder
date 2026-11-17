@@ -27,18 +27,30 @@ interface MemberRow {
   device_name: string;
   device_type: 1 | 2 | 4;
   last_seen_at: number | null;
+  camera_facing: 'front' | 'back' | null;
+  is_recording: number | null;
+  battery_level: number | null;
+  free_storage_bytes: number | null;
+  resolution: string | null;
+  fps: number | null;
+  state_updated_at: number | null;
 }
 
-function getRoom(ctx: Ctx, id: string): RoomRow {
+export function getRoom(ctx: Ctx, id: string): RoomRow {
   const r = ctx.db.prepare('SELECT * FROM rooms WHERE id = ?').get(id) as RoomRow | undefined;
   return r ?? fail(Codes.PARAM_VALUE_INVALID, 'Room not found', { field: 'room_id' });
 }
 
-function members(ctx: Ctx, roomId: string) {
+/** Danh sách máy đang trong phòng, kèm trạng thái mới nhất do sync_device gửi lên. */
+export function members(ctx: Ctx, roomId: string) {
   const rows = ctx.db
     .prepare(
-      `SELECT m.id, m.user_id, m.device_id, m.camera_name, m.joined_at, d.device_name, d.device_type, d.last_seen_at
-       FROM room_members m JOIN devices d ON d.id = m.device_id
+      `SELECT m.id, m.user_id, m.device_id, m.camera_name, m.joined_at, d.device_name, d.device_type, d.last_seen_at,
+              s.camera_facing, s.is_recording, s.battery_level, s.free_storage_bytes, s.resolution, s.fps,
+              s.updated_at AS state_updated_at
+       FROM room_members m
+       JOIN devices d ON d.id = m.device_id
+       LEFT JOIN device_states s ON s.device_id = m.device_id
        WHERE m.room_id = ? AND m.left_at IS NULL ORDER BY m.joined_at`,
     )
     .all(roomId) as unknown as MemberRow[];
@@ -52,6 +64,19 @@ function members(ctx: Ctx, roomId: string) {
     device_type: m.device_type,
     is_online: m.last_seen_at && m.last_seen_at >= onlineSince ? ('1' as const) : ('0' as const),
     joined_at: iso(m.joined_at),
+    last_seen_at: m.last_seen_at ? iso(m.last_seen_at) : null,
+    state:
+      m.state_updated_at === null
+        ? null
+        : {
+            camera_facing: m.camera_facing ?? 'back',
+            is_recording: m.is_recording ? ('1' as const) : ('0' as const),
+            battery_level: m.battery_level,
+            free_storage_bytes: m.free_storage_bytes,
+            resolution: m.resolution,
+            fps: m.fps,
+            updated_at: iso(m.state_updated_at),
+          },
   }));
 }
 
@@ -196,7 +221,7 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
       const m = auth.device
         ? (db
             .prepare(
-              'SELECT left_at, left_reason FROM room_members WHERE room_id = ? AND device_id = ? ORDER BY joined_at DESC LIMIT 1',
+              'SELECT left_at, left_reason FROM room_members WHERE room_id = ? AND device_id = ? ORDER BY (left_at IS NULL) DESC, joined_at DESC, rowid DESC LIMIT 1',
             )
             .get(room.id, auth.device.id) as { left_at: number | null; left_reason: string | null } | undefined)
         : undefined;

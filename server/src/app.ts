@@ -7,6 +7,7 @@ import type { Ctx } from './context.ts';
 import { ApiError, Codes, envelope, fail } from './lib/errors.ts';
 import { authRoutes } from './modules/auth.ts';
 import { roomRoutes } from './modules/rooms.ts';
+import { syncRoutes } from './modules/sync.ts';
 
 export const API_PREFIX = '/api';
 
@@ -67,6 +68,7 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promi
       api.get('/health', async () => envelope(Codes.OK, undefined, { status: 'ok', time: new Date(ctx.now()).toISOString() }));
       authRoutes(api, ctx);
       roomRoutes(api, ctx);
+      syncRoutes(api, ctx);
     },
     { prefix: API_PREFIX },
   );

@@ -5,6 +5,8 @@ import { api, getServerUrl } from '../api';
 import { Button, Row } from '../components/ui';
 import { errText, useNav } from '../nav';
 import { colors } from '../theme';
+import { DeviceSyncProvider } from '../sync';
+import { LibraryTab } from './LibraryTab';
 import { RoomTab } from './RoomTab';
 
 type Tab = 'room' | 'library' | 'settings';
@@ -21,9 +23,13 @@ export function HomeScreen() {
   if (nav.session?.account_role === 'controller') return <ControllerNotice />;
 
   return (
+    <DeviceSyncProvider>
     <SafeAreaView style={st.screen} edges={['top', 'left', 'right']}>
       <View style={{ flex: 1 }}>
-        {tab === 'room' && <RoomTab />}
+        {/* Tab Phòng luôn được giữ lại để camera sẵn sàng nhận lệnh và không ngắt clip đang quay */}
+        <View style={[{ flex: 1 }, tab !== 'room' && { display: 'none' }]}>
+          <RoomTab />
+        </View>
         {tab === 'library' && <LibraryTab />}
         {tab === 'settings' && <SettingsTab />}
       </View>
@@ -36,18 +42,10 @@ export function HomeScreen() {
         ))}
       </SafeAreaView>
     </SafeAreaView>
+    </DeviceSyncProvider>
   );
 }
 
-function LibraryTab() {
-  return (
-    <View style={st.centerPad}>
-      <Text style={{ fontSize: 40 }}>🎞️</Text>
-      <Text style={st.h1}>Video đã quay</Text>
-      <Text style={st.muted}>Clip quay trên thiết bị này sẽ hiển thị ở đây và tự động upload lên server.</Text>
-    </View>
-  );
-}
 
 function SettingsTab() {
   const nav = useNav();

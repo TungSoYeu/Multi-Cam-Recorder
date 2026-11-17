@@ -89,6 +89,20 @@ export interface MeData {
   room_id: string | null;
 }
 
+export type CameraFacing = 'front' | 'back';
+
+/** Trạng thái thiết bị do sync_device gửi lên. */
+export interface DeviceState {
+  camera_facing: CameraFacing;
+  is_recording: '0' | '1';
+  /** 0–100, -1 nếu không đọc được */
+  battery_level: number | null;
+  free_storage_bytes: number | null;
+  resolution: string | null;
+  fps: number | null;
+  updated_at: string;
+}
+
 export interface RoomMember {
   member_id: string;
   user_id: string;
@@ -98,6 +112,44 @@ export interface RoomMember {
   device_type: DeviceType;
   is_online: '0' | '1';
   joined_at: string;
+  last_seen_at: string | null;
+  state: DeviceState | null;
+}
+
+export interface SyncDeviceRequest {
+  camera_facing: CameraFacing;
+  is_recording: boolean;
+  battery_level?: number;
+  free_storage_bytes?: number;
+  resolution?: string;
+  fps?: number;
+}
+
+export type LeftReason = 'kicked' | 'closed' | 'left' | 'logout';
+
+export interface SyncDeviceData {
+  server_time: string;
+  server_time_ms: number;
+  interval_ms: number;
+  room: { room_id: string; room_name: string; member_id: string } | null;
+  last_left_reason: LeftReason | null;
+  /** Lệnh điều khiển quay */
+  commands: unknown[];
+}
+
+export interface SyncRoomData {
+  room_id: string;
+  room_name: string;
+  invite_code: string;
+  expires_at: string;
+  max_members: number;
+  server_time: string;
+  server_time_ms: number;
+  interval_ms: number;
+  total: number;
+  online: number;
+  recording: null;
+  members: RoomMember[];
 }
 
 export interface RoomData {

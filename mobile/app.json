@@ -15,9 +15,15 @@
           "microphonePermission": "Multi-Cam cần micro để ghi âm thanh khi quay video.",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-video"
     ],
-    "ios": { "bundleIdentifier": "vn.multicam.remote", "supportsTablet": true },
-    "android": { "package": "vn.multicam.remote" }
+    "ios": {
+      "bundleIdentifier": "vn.multicam.remote",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "vn.multicam.remote"
+    }
   }
 }
