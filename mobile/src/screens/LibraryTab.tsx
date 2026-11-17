@@ -4,6 +4,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { colors } from '../theme';
 import { deleteClips, formatBytes, formatDuration, listClips, subscribeClips, type LocalClip } from '../video/library';
+import { blockedReason, resumeUploads, subscribeUploads, uploadUi, type UploadUi } from '../video/uploader';
+
+function uploadLabel(u: UploadUi): { text: string; color: string } {
+  switch (u.status) {
+    case 'done':
+      return { text: '✓ Đã tải lên', color: colors.ok };
+    case 'hashing':
+      return { text: 'Đang chuẩn bị…', color: colors.muted };
+    case 'uploading':
+      return { text: `⬆ ${Math.round(u.progress * 100)}%`, color: colors.accent };
+    case 'paused':
+      return { text: 'Tạm dừng', color: '#e5c33a' };
+    case 'error':
+      return { text: u.message ?? 'Lỗi', color: colors.danger };
+    default:
+      return { text: 'Chờ tải lên', color: colors.muted };
+  }
+}
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const dateText = (ms: number) => {
@@ -23,10 +41,18 @@ export function LibraryTab() {
     listClips().then(setClips).catch(() => setClips([]));
   }, []);
 
+  const [, setTick] = useState(0);
   useEffect(() => {
     reload();
-    return subscribeClips(reload);
+    const a = subscribeClips(reload);
+    const b = subscribeUploads(() => setTick((t) => t + 1));
+    return () => {
+      a();
+      b();
+    };
   }, [reload]);
+  const pausedCount = clips.filter((c) => uploadUi(c).status === 'paused').length;
+  const blocked = blockedReason();
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -70,6 +96,14 @@ export function LibraryTab() {
         ) : null}
       </View>
 
+      {pausedCount || blocked ? (
+        <Pressable style={st.retry} onPress={resumeUploads} accessibilityRole="button">
+          <Text style={st.retryText} numberOfLines={2}>
+            {blocked ?? `${pausedCount} clip tải lên bị gián đoạn`} · Thử lại
+          </Text>
+        </Pressable>
+      ) : null}
+
       <FlatList
         data={clips}
         keyExtractor={(c) => c.id}
@@ -104,11 +138,24 @@ export function LibraryTab() {
                 )}
                 <Text style={st.duration}>{formatDuration(item.duration_ms)}</Text>
                 {selecting ? <View style={[st.check, isSel && st.checkOn]}>{isSel ? <Text style={st.checkMark}>✓</Text> : null}</View> : null}
-                {!item.uploaded ? (
-                  <View style={st.badge}>
-                    <Text style={st.badgeText}>Chưa tải lên</Text>
-                  </View>
-                ) : null}
+                {(() => {
+                  const u = uploadUi(item);
+                  const l = uploadLabel(u);
+                  return (
+                    <>
+                      <View style={st.badge}>
+                        <Text style={[st.badgeText, { color: l.color }]} numberOfLines={1}>
+                          {l.text}
+                        </Text>
+                      </View>
+                      {u.status === 'uploading' || u.status === 'hashing' ? (
+                        <View style={st.progressTrack}>
+                          <View style={[st.progressBar, { width: `${Math.round(u.progress * 100)}%` }]} />
+                        </View>
+                      ) : null}
+                    </>
+                  );
+                })()}
               </View>
               <Text style={st.name} numberOfLines={1}>
                 {item.file_name}
@@ -172,7 +219,11 @@ const st = StyleSheet.create({
   checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   checkMark: { color: colors.accentInk, fontWeight: '800', fontSize: 12 },
   badge: { position: 'absolute', right: 6, top: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  badgeText: { color: colors.accent, fontSize: 10, fontWeight: '700' },
+  badgeText: { color: colors.accent, fontSize: 10, fontWeight: '700', maxWidth: 110 },
+  progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
+  progressBar: { height: 3, backgroundColor: colors.accent },
+  retry: { marginHorizontal: 20, marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: '#e5c33a1f', borderWidth: 1, borderColor: '#e5c33a66' },
+  retryText: { color: '#e5c33a', fontSize: 13, fontWeight: '600' },
   name: { color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 6 },
   meta: { color: colors.muted, fontSize: 11, marginTop: 2 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 80 },

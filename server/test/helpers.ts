@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { after } from 'node:test';
 import { buildApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 import type { Ctx } from '../src/context.ts';
@@ -8,8 +12,14 @@ export const CONTROLLER = { email: 'boss@multicam.local', phone: '0900000000', p
 
 export async function setup() {
   let clock = Date.parse('2026-08-03T14:25:30Z');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multicam-test-'));
   const config = loadConfig({
     dbPath: ':memory:',
+    dataDir: tmp,
+    uploadDir: path.join(tmp, 'uploads'),
+    videoDir: path.join(tmp, 'videos'),
+    ffmpegPath: null,
+    defaultChunkBytes: 256 * 1024,
     webDist: null,
     returnVerifyCode: true,
     controller: { ...CONTROLLER, firstName: 'Boss', lastName: 'Controller' },
@@ -17,6 +27,7 @@ export async function setup() {
   const ctx: Ctx = { db: openDatabase(':memory:'), config, now: () => clock };
   await ensureController(ctx);
   const app = await buildApp(ctx);
+  after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
   async function call(method: string, url: string, body?: unknown, token?: string) {
     const res = await app.inject({

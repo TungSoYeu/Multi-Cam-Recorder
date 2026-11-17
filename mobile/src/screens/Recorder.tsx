@@ -7,6 +7,7 @@ import { Button } from '../components/ui';
 import { cameraState, clock, useCommandHandler } from '../sync';
 import { colors } from '../theme';
 import { formatDuration, saveRecording } from '../video/library';
+import { kickUploads } from '../video/uploader';
 
 const KEEP_AWAKE_TAG = 'recorder';
 /** Máy lỡ lệnh Start: chờ thêm 1 giây sau giờ hẹn rồi mới tự bắt đầu theo trạng thái phòng. */
@@ -104,7 +105,8 @@ export function Recorder({
           recordingSessionId: sessionId,
           startedAtServerMs: sessionId ? startedAtServer : null,
         });
-        setMessage(`Đã lưu ${clip.file_name}`);
+        setMessage(`Đã lưu ${clip.file_name} · đang tải lên`);
+        kickUploads(); // tuần 4: dừng quay là tự upload
       })
       .catch((e: unknown) => {
         setMessage(`Lỗi quay: ${e instanceof Error ? e.message : String(e)}`);

@@ -65,9 +65,29 @@ Remote không cần gọi get_room_members để biết mình bị kick hay phò
 - iPhone: Expo Go chỉ ghi được QuickTime `.mov`. App ép codec H.264 (`avc1`, vì HEVC không phát được trên Chrome/Windows), rồi đổi brand trong hộp `ftyp` từ `qt  ` sang `mp42`/`isom` ngay tại chỗ (không nén lại hình). Xem `packages/shared/src/mp4.ts`. Ở tuần 4 server sẽ remux lại bằng ffmpeg khi nhận file.
 - Clip lưu trong thư mục riêng của app (`Documents/videos/VID_yyyyMMdd_HHmmss_nnn.mp4`), kèm ảnh thu nhỏ và `local_video_uid` để chống upload trùng.
 
-## D, E — Tuần 4–5
+## D — Tự động upload (tuần 4)
 
-Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng slide: `/videos/uploads...`, `/videos...`.
+| # | API | Method & path | Tham số / kết quả |
+|---|---|---|---|
+| 20 | init_upload | `POST /videos/uploads` | `local_video_uid` (UUID clip sinh trên máy), `file_name`, `total_size`, `checksum_sha256` (toàn file, hex), *tùy chọn* `chunk_size` (256 KB–8 MB, mặc định 5 MB), `duration_ms`, `recording_session_id`, `recorded_at_ms`, `camera_facing`, `mime_type`. Trả `upload_id, chunk_size, total_chunks, received_count, missing_chunks[], expires_at`. Clip đang upload dở thì trả lại **đúng phiên cũ** (resume). Lỗi: `3005` đã có trên server (`data.video_id`, coi như xong), `1006` > 1 GB, `3004` vượt hạn mức (tính cả phiên đang upload), `1004` `recording_session_id` không thuộc phòng mà máy từng vào |
+| 21 | upload_chunk | `PUT /videos/uploads/{upload_id}/chunks/{index}` | Body nhị phân `application/octet-stream`, header `X-Chunk-Sha256`. Mảnh cuối có thể ngắn hơn. Lỗi: `3003` sai SHA-256 của mảnh (gửi lại mảnh đó), `1004` sai kích thước / sai chỉ số, `1002` thiếu header, `1007` ghi đĩa thất bại, `3001` phiên không tồn tại / hết hạn / của người khác. Gửi lại mảnh đã có thì ghi đè. Mỗi mảnh nhận được sẽ gia hạn phiên thêm 24 giờ |
+| 22 | get_upload_status | `GET /videos/uploads/{upload_id}` | `missing_chunks[]`, `received_count`, `status`, `video_id` |
+| 23 | complete_upload | `POST /videos/uploads/{upload_id}/complete` | *Tùy chọn* `thumbnail_base64` (JPEG ≤ 300 KB). Ghép mảnh, kiểm tra SHA-256 toàn file, remux MP4 (nếu có ffmpeg), tạo video. Trả `video_id, file_name, size_bytes, duration_ms, room_id, recording_session_id, has_thumbnail, …`. Lỗi: `3002` thiếu mảnh (`data.missing_chunks`), `3003` sai toàn file (`data.scope = "file"`, phiên bị hủy → mở phiên mới). Gọi lại sau khi đã xong thì trả cùng video |
+
+**Phía app (`mobile/src/video/uploader.ts`):**
+- Dừng quay → lưu clip → tự đưa vào hàng đợi, upload lần lượt từng clip.
+- SHA-256 tính bằng `@noble/hashes`, đọc từng khối 4 MB nên không nạp cả file vào RAM.
+- Mảnh nhị phân gửi bằng `expo/fetch`.
+- Mỗi mảnh thử tối đa 3 lần (chờ 1 s, 2 s, 4 s); vẫn lỗi thì tạm dừng, tự thử lại khi mở lại hoặc quay lại app, hoặc khi bấm "Thử lại" trong Thư viện.
+- `upload_id` và checksum lưu cùng clip nên tắt app vẫn resume được.
+- `sync_device` gửi `uploads_pending` và `upload_progress` để Controller thấy tiến độ từng máy.
+- Giới hạn: Expo Go không upload được khi app chạy nền, nên trong lúc upload phải để app mở.
+
+**Phía server:** mảnh tạm ở `data/uploads/{upload_id}/`, video ở `data/videos/{video_id}.mp4` (+ `.jpg`). Phiên quá hạn được dọn mỗi 30 phút. Nếu có ffmpeg (`FFMPEG_PATH`), server remux bằng `-c copy -movflags +faststart` (không nén lại) và tự tạo ảnh thu nhỏ khi app không gửi.
+
+## E — Tuần 5
+
+Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng slide: `/videos`, `/videos/{id}`, `/videos/{id}/download`, `/videos/bulk-delete`.
 
 ## Khác biệt nhỏ so với slide
 

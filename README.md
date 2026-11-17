@@ -18,7 +18,9 @@ Một máy **Controller** (web trên laptop) điều khiển nhiều máy **Remo
   `sync_device` / `sync_room` gửi 2 giây một lần: Controller thấy danh sách máy kèm pin, dung lượng trống, camera, độ phân giải, ON AIR/ONLINE/OFFLINE.
 - ✅ **Tuần 3**: Controller bấm REC/STOP → mọi máy cùng bắt đầu/dừng theo giờ hẹn (bù lệch đồng hồ từng máy), ACK từng máy, chống lệnh trùng (1010),
   máy lỡ lệnh tự khớp theo trạng thái phòng, Controller đổi camera trước/sau từ xa. Cơ chế chi tiết: [docs/API.md](docs/API.md#cơ-chế-startstop-đồng-bộ).
-- ⏳ Tuần 4–5: upload tự động, thư viện video trên server.
+- ✅ **Tuần 4**: dừng quay là tự upload theo mảnh 5 MB (SHA-256 từng mảnh và toàn file), resume khi mất mạng / tắt app, chống upload trùng,
+  giới hạn 1 GB và hạn mức lưu trữ. Thư viện trên app hiện tiến độ từng clip; Controller thấy "⬆ n clip · %" trên từng máy và số clip đã lên server.
+- ⏳ Tuần 5: Controller xem / tải / xóa video trên server.
 
 ## Chạy lần đầu (Windows, PowerShell)
 
@@ -66,7 +68,7 @@ Mỗi lần chạy lại cloudflared, URL sẽ đổi. Muốn URL cố định t
 ## Kiểm tra
 
 ```powershell
-npm test          # 33 test: auth, phòng, sync, Start/Stop, đồng hồ, chuẩn hóa MP4
+npm test          # 44 test: auth, phòng, sync, Start/Stop, đồng hồ, upload, migration, MP4
 npm run typecheck # shared, server, web, mobile
 ```
 
@@ -88,6 +90,22 @@ npm run typecheck # shared, server, web, mobile
 - **Expo Go, không cần Mac**: chỉ dùng module có sẵn trong Expo Go (camera, file-system, battery, video, video-thumbnails, keep-awake).
   iPhone ghi QuickTime nên app ép H.264 và đổi header `ftyp` sang MP4 ngay trên máy (không nén lại). Chi tiết ở [docs/API.md](docs/API.md#video-mp4-trên-thiết-bị-tuần-2).
 - **Tab Phòng luôn được giữ trong bộ nhớ** để camera sẵn sàng nhận lệnh, và chuyển tab không làm ngắt clip đang quay.
+
+### Cài ffmpeg (khuyên dùng)
+
+Có ffmpeg thì server remux video sang MP4 chuẩn (không nén lại hình) và tự tạo ảnh thu nhỏ. Không có thì server vẫn chạy và lưu nguyên file từ máy quay.
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Mở lại terminal rồi chạy lại server; dòng `ffmpeg:` trong log khởi động cho biết server có dùng được ffmpeg hay không.
+
+## Kiểm thử tuần 4
+
+1. Quay 2–3 clip, giữ app mở. Tab **Thư viện**: mỗi clip lần lượt "Đang chuẩn bị…" → "⬆ x%" → "✓ Đã tải lên".
+2. Web: ô của máy hiện "⬆ n clip · x%"; thanh dưới hiện số clip đã lên server. File nằm trong `server/data/videos/`.
+3. Bật chế độ máy bay giữa lúc upload → clip chuyển "Tạm dừng". Tắt chế độ máy bay, bấm "Thử lại" (hoặc thoát ra rồi mở lại app) → upload tiếp từ mảnh còn thiếu, không gửi lại từ đầu.
 
 ## Kiểm thử tuần 3 (cần 2 điện thoại)
 

@@ -9,6 +9,7 @@ import { authRoutes } from './modules/auth.ts';
 import { roomRoutes } from './modules/rooms.ts';
 import { recordingRoutes } from './modules/recording.ts';
 import { syncRoutes } from './modules/sync.ts';
+import { uploadRoutes } from './modules/uploads.ts';
 
 export const API_PREFIX = '/api';
 
@@ -71,6 +72,7 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promi
       roomRoutes(api, ctx);
       syncRoutes(api, ctx);
       recordingRoutes(api, ctx);
+      uploadRoutes(api, ctx);
     },
     { prefix: API_PREFIX },
   );

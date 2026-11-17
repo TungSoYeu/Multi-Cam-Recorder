@@ -27,6 +27,8 @@ export function syncRoutes(app: FastifyInstance, ctx: Ctx) {
     const storage = v.optInt(b, 'free_storage_bytes', 0, Number.MAX_SAFE_INTEGER);
     const resolution = v.optStr(b, 'resolution', { max: 20 });
     const fps = v.optInt(b, 'fps', 1, 240);
+    const uploadsPending = v.optInt(b, 'uploads_pending', 0, 100_000);
+    const uploadProgress = v.optInt(b, 'upload_progress', 0, 100);
     const now = ctx.now();
 
     const m = db
@@ -42,13 +44,16 @@ export function syncRoutes(app: FastifyInstance, ctx: Ctx) {
 
     tx(db, () => {
       db.prepare(
-        `INSERT INTO device_states (device_id, camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO device_states (device_id, camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps,
+           uploads_pending, upload_progress, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (device_id) DO UPDATE SET
            camera_facing = excluded.camera_facing, is_recording = excluded.is_recording,
            battery_level = excluded.battery_level, free_storage_bytes = excluded.free_storage_bytes,
-           resolution = excluded.resolution, fps = excluded.fps, updated_at = excluded.updated_at`,
-      ).run(deviceId, facing, isRecording ? 1 : 0, battery ?? null, storage ?? null, resolution ?? null, fps ?? null, now);
+           resolution = excluded.resolution, fps = excluded.fps, uploads_pending = excluded.uploads_pending,
+           upload_progress = excluded.upload_progress, updated_at = excluded.updated_at`,
+      ).run(deviceId, facing, isRecording ? 1 : 0, battery ?? null, storage ?? null, resolution ?? null, fps ?? null,
+        uploadsPending ?? null, uploadProgress ?? null, now);
       db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(now, deviceId);
       if (inRoom) saveAcks(ctx, m.room_id, deviceId, b.acks);
     });
@@ -90,6 +95,8 @@ export function syncRoutes(app: FastifyInstance, ctx: Ctx) {
       total: list.length,
       online: list.filter((x) => x.is_online === '1').length,
       recording: recordingPayload(syncSession(ctx, room.id)),
+      // Số clip của phòng đã upload xong lên server
+      videos_received: (db.prepare('SELECT COUNT(*) AS n FROM videos WHERE room_id = ?').get(room.id) as { n: number }).n,
       members: list,
     });
   });

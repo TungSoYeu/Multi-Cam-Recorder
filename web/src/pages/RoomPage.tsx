@@ -56,6 +56,7 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
   const [members, setMembers] = useState<Member[]>([]);
   const [recording, setRecording] = useState<RecordingState | null>(null);
   const [lastDuration, setLastDuration] = useState(0);
+  const [videosReceived, setVideosReceived] = useState(0);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qr, setQr] = useState('');
@@ -109,6 +110,7 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
         if (stop) return;
         clock.current.sample(sentAt, Date.now(), d.server_time_ms);
         setMembers(d.members);
+        setVideosReceived(d.videos_received);
         if (Date.now() > holdUntil.current) setRecording(d.recording);
         if (d.invite_code !== room.invite_code) setRoom((r) => (r ? { ...r, invite_code: d.invite_code, expires_at: d.expires_at } : r));
         setError(null);
@@ -213,7 +215,7 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
   const expired = remaining === 0;
 
   let timerText = hhmmss(lastDuration);
-  let timerNote = `${online}/${members.length} thiết bị kết nối`;
+  let timerNote = `${online}/${members.length} thiết bị kết nối · ${videosReceived} clip đã lên server`;
   if (recording && startsIn > 0) {
     timerText = hhmmss(0);
     timerNote = `Bắt đầu quay sau ${Math.ceil(startsIn / 1000)} giây…`;
@@ -295,6 +297,16 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
                       {!on ? 'Mất kết nối' : rec ? 'Đang quay' : 'Sẵn sàng nhận lệnh'}
                       {on && s ? ` · ${s.camera_facing === 'front' ? 'Camera trước' : 'Camera sau'}` : ''}
                     </span>
+                    {s && s.uploads_pending > 0 ? (
+                      <span className="upload" title="Clip đang chờ / đang tải lên server">
+                        ⬆ {s.uploads_pending} clip{s.upload_progress !== null ? ` · ${s.upload_progress}%` : ' chờ tải lên'}
+                        {s.upload_progress !== null ? (
+                          <span className="upload-track">
+                            <span style={{ width: `${s.upload_progress}%` }} />
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
                     {cmd ? (
                       <span className={`cmd ${cmd.status}`} title="Trạng thái lệnh gần nhất">
                         {CMD_LABEL[cmd.type]}: {cmd.status === 'done' ? 'đã thực hiện' : cmd.status === 'failed' ? 'thất bại' : 'chờ máy nhận…'}

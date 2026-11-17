@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
+import { fetch as expoFetch } from 'expo/fetch';
 import { createClient, type DeviceInfo, type StoredSession } from '@multicam/shared';
 
 const SESSION_KEY = 'multicam.session';
@@ -78,4 +79,6 @@ export const api = createClient({
     },
   },
   onSessionExpired: () => listeners.forEach((fn) => fn()),
+  // fetch mặc định của React Native không gửi được Uint8Array → dùng fetch native của Expo cho upload mảnh
+  binaryFetch: expoFetch as unknown as typeof fetch,
 });
