@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Multi-Cam Remote",
+    "slug": "multicam-remote",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0e0e10",
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Multi-Cam cần camera để quét mã QR phòng và quay video.",
+          "microphonePermission": "Multi-Cam cần micro để ghi âm thanh khi quay video.",
+          "recordAudioAndroid": true
+        }
+      ]
+    ],
+    "ios": { "bundleIdentifier": "vn.multicam.remote", "supportsTablet": true },
+    "android": { "package": "vn.multicam.remote" }
+  }
+}

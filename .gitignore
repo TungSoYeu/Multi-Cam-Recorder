@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.expo/
+.env
+data/
+*.db
+*.db-*
+coverage/
+.DS_Store
