@@ -35,7 +35,21 @@ export interface ClientOptions {
   /** Gọi khi refresh thất bại và phiên bị xóa (đưa người dùng về màn Đăng nhập). */
   onSessionExpired?: () => void;
   timeoutMs?: number;
+  /**
+   * fetch dùng cho body nhị phân (upload_chunk). React Native: truyền `fetch` của 'expo/fetch'
+   * vì fetch mặc định của RN không gửi được Uint8Array.
+   */
+  binaryFetch?: typeof fetch;
+  /** Thời gian chờ tối đa cho một mảnh upload (ms) */
+  uploadTimeoutMs?: number;
 }
+
+/** Body nhị phân kèm header riêng (dùng cho upload_chunk) */
+export interface BinaryBody {
+  binary: Uint8Array;
+  headers: Record<string, string>;
+}
+const isBinary = (b: unknown): b is BinaryBody => !!b && typeof b === 'object' && (b as BinaryBody).binary instanceof Uint8Array;
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -55,16 +69,19 @@ export function createClient(opts: ClientOptions) {
 
   async function raw<D>(method: Method, path: string, body?: unknown, token?: string): Promise<T.ApiEnvelope<D>> {
     const base = (await opts.baseUrl()).replace(/\/+$/, '');
+    const bin = isBinary(body);
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 15000);
+    const timer = setTimeout(() => ctrl.abort(), bin ? (opts.uploadTimeoutMs ?? 120_000) : (opts.timeoutMs ?? 15000));
     try {
       const headers: Record<string, string> = { Accept: 'application/json' };
-      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      if (bin) Object.assign(headers, { 'Content-Type': 'application/octet-stream' }, body.headers);
+      else if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(base + path, {
+      const doFetch = bin ? (opts.binaryFetch ?? fetch) : fetch;
+      const res = await doFetch(base + path, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: bin ? (body.binary as unknown as NonNullable<Parameters<typeof fetch>[1]>['body']) : body === undefined ? undefined : JSON.stringify(body),
         signal: ctrl.signal,
       });
       const json = (await res.json().catch(() => null)) as T.ApiEnvelope<D> | null;
@@ -180,6 +197,18 @@ export function createClient(opts: ClientOptions) {
     syncDevice: (deviceId: string, b: T.SyncDeviceRequest) =>
       call<T.SyncDeviceData>('POST', `/devices/${encodeURIComponent(deviceId)}/sync`, b),
     syncRoom: (roomId: string) => call<T.SyncRoomData>('GET', `/rooms/${encodeURIComponent(roomId)}/sync`),
+
+    // D — Upload theo mảnh
+    initUpload: (b: T.InitUploadRequest) => call<T.UploadStatus>('POST', '/videos/uploads', b),
+    /** Gửi một mảnh nhị phân kèm SHA-256 (hex) của mảnh */
+    uploadChunk: (uploadId: string, index: number, bytes: Uint8Array, sha256Hex: string) =>
+      call<T.ChunkResult>('PUT', `/videos/uploads/${encodeURIComponent(uploadId)}/chunks/${index}`, {
+        binary: bytes,
+        headers: { 'X-Chunk-Sha256': sha256Hex },
+      } satisfies BinaryBody),
+    getUploadStatus: (uploadId: string) => call<T.UploadStatus>('GET', `/videos/uploads/${encodeURIComponent(uploadId)}`),
+    completeUpload: (uploadId: string, thumbnailBase64?: string) =>
+      call<T.VideoInfo>('POST', `/videos/uploads/${encodeURIComponent(uploadId)}/complete`, thumbnailBase64 ? { thumbnail_base64: thumbnailBase64 } : {}),
 
     // Điều khiển quay. Mã 1010 (lệnh trùng do mạng chập chờn) được coi như thành công.
     startRecording: (roomId: string, clientCommandId: string) =>

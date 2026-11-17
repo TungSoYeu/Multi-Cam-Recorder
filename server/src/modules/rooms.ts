@@ -33,6 +33,8 @@ interface MemberRow {
   free_storage_bytes: number | null;
   resolution: string | null;
   fps: number | null;
+  uploads_pending: number | null;
+  upload_progress: number | null;
   state_updated_at: number | null;
 }
 
@@ -46,7 +48,7 @@ export function members(ctx: Ctx, roomId: string) {
   const rows = ctx.db
     .prepare(
       `SELECT m.id, m.user_id, m.device_id, m.camera_name, m.joined_at, d.device_name, d.device_type, d.last_seen_at,
-              s.camera_facing, s.is_recording, s.battery_level, s.free_storage_bytes, s.resolution, s.fps,
+              s.camera_facing, s.is_recording, s.battery_level, s.free_storage_bytes, s.resolution, s.fps, s.uploads_pending, s.upload_progress,
               s.updated_at AS state_updated_at
        FROM room_members m
        JOIN devices d ON d.id = m.device_id
@@ -75,6 +77,8 @@ export function members(ctx: Ctx, roomId: string) {
             free_storage_bytes: m.free_storage_bytes,
             resolution: m.resolution,
             fps: m.fps,
+            uploads_pending: m.uploads_pending ?? 0,
+            upload_progress: m.upload_progress,
             updated_at: iso(m.state_updated_at),
           },
   }));

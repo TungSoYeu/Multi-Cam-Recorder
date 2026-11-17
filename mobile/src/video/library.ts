@@ -21,6 +21,14 @@ export interface LocalClip {
   started_at_server_ms: number | null;
   container: 'mp4' | 'mov';
   uploaded: boolean;
+  /** SHA-256 toàn file (tính một lần trước khi upload) */
+  checksum_sha256?: string;
+  /** Phiên upload đang dở — để resume */
+  upload_id?: string | null;
+  /** ID video trên server sau khi upload xong */
+  video_id?: string | null;
+  /** Lỗi không tự thử lại được (vd: vượt 1 GB) */
+  upload_error?: string | null;
 }
 
 const dir = () => new Directory(Paths.document, 'videos');
@@ -144,6 +152,16 @@ export async function saveRecording(
   };
   writeIndex([...clips, clip]);
   return clip;
+}
+
+export async function getClip(id: string): Promise<LocalClip | undefined> {
+  return (await readIndex()).find((c) => c.id === id);
+}
+
+/** Cập nhật metadata của một clip (trạng thái upload) và lưu xuống đĩa. */
+export async function updateClip(id: string, patch: Partial<LocalClip>) {
+  const clips = await readIndex();
+  writeIndex(clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 }
 
 export async function deleteClips(ids: string[]) {

@@ -14,6 +14,7 @@ import {
 } from '@multicam/shared';
 import { api } from './api';
 import { useNav } from './nav';
+import { resumeUploads, uploadSummary } from './video/uploader';
 
 /** Trạng thái camera hiện tại — màn quay cập nhật, vòng sync đọc và gửi lên server. */
 export const cameraState = {
@@ -102,6 +103,7 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
     busy.current = true;
     const sending = acks.current.splice(0);
     try {
+      const up = await uploadSummary().catch(() => null);
       const sentAt = Date.now();
       const d = await api.syncDevice(deviceId, {
         camera_facing: cameraState.facing,
@@ -110,6 +112,7 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
         free_storage_bytes: readFreeStorage(),
         resolution: cameraState.resolution,
         fps: cameraState.fps,
+        ...(up ? { uploads_pending: up.pending, ...(up.progress !== null ? { upload_progress: up.progress } : {}) } : {}),
         ...(sending.length ? { acks: sending } : {}),
       });
       clock.sample(sentAt, Date.now(), d.server_time_ms);
@@ -155,9 +158,13 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       if (!stopped) timer = setTimeout(loop, intervalRef.current);
     };
     loop();
+    // Mở app / quay lại app: chạy tiếp các upload đang dở hoặc bị tạm dừng
+    resumeUploads();
     const sub = AppState.addEventListener('change', (s) => {
+      const wasActive = active;
       active = s === 'active';
       if (active) tick();
+      if (active && !wasActive) resumeUploads();
     });
     return () => {
       stopped = true;

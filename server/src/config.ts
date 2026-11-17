@@ -16,6 +16,16 @@ export interface Config {
   inviteTtlSec: number;
   defaultMaxMembers: number;
   onlineWindowSec: number;
+  /** Thư mục chứa mảnh upload tạm và video hoàn chỉnh */
+  uploadDir: string;
+  videoDir: string;
+  maxVideoBytes: number;
+  defaultChunkBytes: number;
+  minChunkBytes: number;
+  maxChunkBytes: number;
+  uploadTtlSec: number;
+  /** Đường dẫn ffmpeg để remux sang MP4 chuẩn; null = không dùng */
+  ffmpegPath: string | null;
   controller: {
     email: string;
     phone: string;
@@ -46,6 +56,14 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     inviteTtlSec: 600,
     defaultMaxMembers: 8,
     onlineWindowSec: 15,
+    uploadDir: path.join(dataDir, 'uploads'),
+    videoDir: path.join(dataDir, 'videos'),
+    maxVideoBytes: 1024 * 1024 * 1024, // 1 GB theo bảng mã 1006
+    defaultChunkBytes: 5 * 1024 * 1024,
+    minChunkBytes: 256 * 1024,
+    maxChunkBytes: 8 * 1024 * 1024,
+    uploadTtlSec: 24 * 3600,
+    ffmpegPath: env.FFMPEG_PATH === 'none' ? null : (env.FFMPEG_PATH ?? 'ffmpeg'),
     controller: {
       email: (env.CONTROLLER_EMAIL ?? 'controller@multicam.local').toLowerCase(),
       phone: env.CONTROLLER_PHONE ?? '0900000000',

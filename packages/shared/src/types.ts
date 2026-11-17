@@ -100,6 +100,10 @@ export interface DeviceState {
   free_storage_bytes: number | null;
   resolution: string | null;
   fps: number | null;
+  /** Số clip đang chờ / đang upload trên máy */
+  uploads_pending: number;
+  /** % của clip đang upload (null nếu không upload) */
+  upload_progress: number | null;
   updated_at: string;
 }
 
@@ -153,6 +157,8 @@ export interface SyncDeviceRequest {
   resolution?: string;
   fps?: number;
   acks?: CommandAck[];
+  uploads_pending?: number;
+  upload_progress?: number;
 }
 
 export type LeftReason = 'kicked' | 'closed' | 'left' | 'logout';
@@ -191,6 +197,8 @@ export interface SyncRoomData {
   total: number;
   online: number;
   recording: RecordingState | null;
+  /** Số clip của phòng đã upload xong */
+  videos_received: number;
   members: (RoomMember & {
     last_command: { command_id: string; type: CommandType; status: 'pending' | 'done' | 'failed' } | null;
   })[];
@@ -230,4 +238,55 @@ export interface RoomMembersData {
   status: 'open';
   total: number;
   members: RoomMember[];
+}
+
+// ===== D — Upload theo mảnh =====
+
+export interface InitUploadRequest {
+  /** UUID của clip sinh trên máy — cùng với checksum dùng để chống upload trùng (3005) */
+  local_video_uid: string;
+  file_name: string;
+  total_size: number;
+  checksum_sha256: string;
+  chunk_size?: number;
+  duration_ms?: number;
+  recording_session_id?: string | null;
+  recorded_at_ms?: number | null;
+  camera_facing?: CameraFacing;
+  mime_type?: 'video/mp4' | 'video/quicktime';
+}
+
+export interface UploadStatus {
+  upload_id: string;
+  status: 'uploading' | 'completed' | 'aborted';
+  total_size: number;
+  chunk_size: number;
+  total_chunks: number;
+  received_count: number;
+  missing_chunks: number[];
+  expires_at: string;
+  video_id: string | null;
+}
+
+export interface ChunkResult {
+  upload_id: string;
+  index: number;
+  received_count: number;
+  total_chunks: number;
+}
+
+export interface VideoInfo {
+  video_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  duration_ms: number | null;
+  checksum_sha256: string;
+  room_id: string | null;
+  recording_session_id: string | null;
+  device_id: string | null;
+  owner_user_id: string;
+  has_thumbnail: '0' | '1';
+  recorded_at: string | null;
+  created_at: string;
 }

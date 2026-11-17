@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { authenticate, iso, type Ctx, type DeviceRow, type UserRow } from '../context.ts';
 import { tx } from '../db/database.ts';
@@ -385,7 +386,9 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     const files = db
       .prepare('SELECT storage_path, thumbnail_path FROM videos WHERE owner_user_id = ?')
       .all(auth.user.id) as { storage_path: string; thumbnail_path: string | null }[];
+    const uploads = db.prepare('SELECT id FROM upload_sessions WHERE user_id = ?').all(auth.user.id) as { id: string }[];
     db.prepare('DELETE FROM users WHERE id = ?').run(auth.user.id); // các bảng con xóa theo ON DELETE CASCADE
+    for (const up of uploads) fs.rmSync(path.join(ctx.config.uploadDir, up.id), { recursive: true, force: true });
     for (const f of files)
       for (const p of [f.storage_path, f.thumbnail_path]) if (p) fs.rmSync(p, { force: true });
     return ok(null);
