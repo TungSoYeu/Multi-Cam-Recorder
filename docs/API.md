@@ -37,9 +37,24 @@ Base URL: `http://<máy chủ>:3000/api` (hoặc `https://xxxx.trycloudflare.com
 | 14 | leave_room | `POST /rooms/{room_id}/leave` | | Remote rời phòng (gọi lặp lại vô hại). Controller gọi = đóng phòng |
 | 15 | close_room | `DELETE /rooms/{room_id}` | Chủ phòng | Mọi thành viên bị đưa ra |
 
-## C, D, E — Tuần 2–5
+## C — Đồng bộ trạng thái (tuần 2)
 
-Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng slide: `/devices/{id}/sync`, `/rooms/{id}/sync`, `/rooms/{id}/recording/start|stop`, `/videos/uploads...`, `/videos...`.
+| # | API | Method & path | Quyền | Tham số / kết quả |
+|---|---|---|---|---|
+| 16 | sync_device | `POST /devices/{device_id}/sync` | Thiết bị của phiên hiện tại (khác → `1009`) | Gửi mỗi `interval_ms` (2 giây): `camera_facing` (`front\|back`), `is_recording`, `battery_level` (0–100, -1 nếu không đọc được), `free_storage_bytes`, `resolution`, `fps`. Trả `server_time, server_time_ms, interval_ms, room{room_id, room_name, member_id} \| null, last_left_reason` (`kicked\|closed\|left\|logout`), `commands[]` (lệnh quay ở tuần 3) |
+| 17 | sync_room | `GET /rooms/{room_id}/sync` | Chủ phòng (`1009` / `2004`), phòng đóng → `2005` | `room_id, room_name, invite_code, expires_at, max_members, server_time, total, online, recording` (tuần 3), `members[]` (như get_room_members, mỗi máy có thêm `last_seen_at` và `state{camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps, updated_at}`; `state = null` nếu máy chưa sync lần nào) |
+
+Remote không cần gọi get_room_members để biết mình bị kick hay phòng bị đóng: `sync_device` trả `room = null` kèm `last_left_reason`.
+
+## Video MP4 trên thiết bị (tuần 2)
+
+- Android (CameraX) ghi sẵn file MP4 (H.264).
+- iPhone: Expo Go chỉ ghi được QuickTime `.mov`. App ép codec H.264 (`avc1`, vì HEVC không phát được trên Chrome/Windows), rồi đổi brand trong hộp `ftyp` từ `qt  ` sang `mp42`/`isom` ngay tại chỗ (không nén lại hình). Xem `packages/shared/src/mp4.ts`. Ở tuần 4 server sẽ remux lại bằng ffmpeg khi nhận file.
+- Clip lưu trong thư mục riêng của app (`Documents/videos/VID_yyyyMMdd_HHmmss_nnn.mp4`), kèm ảnh thu nhỏ và `local_video_uid` để chống upload trùng.
+
+## D, E — Tuần 3–5
+
+Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng slide: `/rooms/{id}/recording/start|stop`, `/videos/uploads...`, `/videos...`.
 
 ## Khác biệt nhỏ so với slide
 

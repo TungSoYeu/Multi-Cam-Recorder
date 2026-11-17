@@ -14,7 +14,9 @@ Một máy **Controller** (web trên laptop) điều khiển nhiều máy **Remo
 
 - ✅ **Tuần 1**: đăng ký, mã xác thực, đăng nhập, refresh token, tạo phòng, join phòng (kèm QR).
   Ngoài ra đã có: quên mật khẩu, đổi mật khẩu, đăng xuất, xóa tài khoản, danh sách máy, kick, rời phòng, đóng phòng (đủ nhóm A và B: 15/28 API).
-- ⏳ Tuần 2–5: quay MP4, đồng bộ Start/Stop, upload, thư viện video. Bảng CSDL cho các tuần này đã có sẵn trong `server/src/db/schema.sql`.
+- ✅ **Tuần 2**: Remote quay video MP4 (1080p, H.264), đổi camera trước/sau, thư viện clip trong app (xem, chọn nhiều để xóa), chế độ quay độc lập.
+  `sync_device` / `sync_room` gửi 2 giây một lần: Controller thấy danh sách máy kèm pin, dung lượng trống, camera, độ phân giải, ON AIR/ONLINE/OFFLINE.
+- ⏳ Tuần 3–5: Start/Stop đồng bộ từ Controller, upload tự động, thư viện video trên server. Bảng CSDL cho các tuần này đã có sẵn trong `server/src/db/schema.sql`.
 
 ## Chạy lần đầu (Windows, PowerShell)
 
@@ -62,7 +64,7 @@ Mỗi lần chạy lại cloudflared, URL sẽ đổi. Muốn URL cố định t
 ## Kiểm tra
 
 ```powershell
-npm test          # 17 test API (auth + phòng)
+npm test          # 24 test: auth, phòng, sync, chuẩn hóa MP4
 npm run typecheck # shared, server, web, mobile
 ```
 
@@ -81,4 +83,13 @@ npm run typecheck # shared, server, web, mobile
 - **Token opaque** (không phải JWT): chỉ lưu SHA-256 trong DB nên thu hồi được ngay (logout, đổi mật khẩu). Refresh token dùng một lần; dùng lại token cũ thì cả phiên bị thu hồi.
 - **Mật khẩu** theo slide signup: 6–20 ký tự, chỉ chữ và số, không trùng số điện thoại. Lưu bằng scrypt.
 - **Polling** (Controller 2 giây, Remote 3 giây) thay cho WebSocket, đúng với nhóm API `sync_*` của slide.
-- **Expo Go, không cần Mac**: chỉ dùng module có sẵn trong Expo Go. iPhone quay ra `.mov`; tuần 2 sẽ chuyển sang MP4 ở server bằng ffmpeg (remux, không nén lại).
+- **Expo Go, không cần Mac**: chỉ dùng module có sẵn trong Expo Go (camera, file-system, battery, video, video-thumbnails, keep-awake).
+  iPhone ghi QuickTime nên app ép H.264 và đổi header `ftyp` sang MP4 ngay trên máy (không nén lại). Chi tiết ở [docs/API.md](docs/API.md#video-mp4-trên-thiết-bị-tuần-2).
+- **Tab Phòng luôn được giữ trong bộ nhớ** để camera sẵn sàng nhận lệnh, và chuyển tab không làm ngắt clip đang quay.
+
+## Kiểm thử tuần 2 trên điện thoại
+
+1. Vào phòng → màn camera hiện banner đỏ "Đang được điều khiển từ xa". Quay 5–10 giây, đổi camera, quay tiếp.
+2. Tab **Thư viện**: clip có ảnh thu nhỏ, thời lượng, dung lượng; chạm để xem (có tiếng), giữ lâu để chọn và xóa.
+3. Web Controller: ô của máy hiện pin, dung lượng trống, camera trước/sau, và **ON AIR** khi máy đang quay.
+4. Chép một clip từ iPhone sang máy tính (AirDrop), mở bằng VLC hoặc Chrome để kiểm tra đúng MP4, có cả hình lẫn tiếng.

@@ -1,55 +1,111 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Switch, Text, View } from 'react-native';
-import { ApiError, type RoomMember } from '@multicam/shared';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ApiError } from '@multicam/shared';
 import { api } from '../api';
 import { QrScanner } from '../components/QrScanner';
 import { Banner, Button, CodeInput, Field } from '../components/ui';
 import { errText, useNav } from '../nav';
+import { useSync } from '../sync';
 import { colors } from '../theme';
+import { Recorder } from './Recorder';
 
-const POLL_MS = 3000;
+const EXIT_TEXT = {
+  kicked: 'Bạn đã bị Controller loại khỏi phòng. Thiết bị chuyển về chế độ quay độc lập.',
+  closed: 'Phòng đã đóng. Thiết bị chuyển về chế độ quay độc lập.',
+} as const;
 
 export function RoomTab() {
-  const [roomId, setRoomId] = useState<string | null | undefined>(undefined);
-  const [notice, setNotice] = useState<string | null>(null);
+  const sync = useSync();
+  const [solo, setSolo] = useState(false);
 
-  // Khôi phục trạng thái phòng khi mở lại app
-  useEffect(() => {
-    api
-      .me()
-      .then((d) => setRoomId(d.room_id))
-      .catch(() => setRoomId(null));
-  }, []);
-
-  if (roomId === undefined)
+  if (!sync.ready)
     return (
       <View style={st.center}>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
-  if (roomId)
+
+  if (sync.room) {
+    const room = sync.room;
     return (
-      <InRoom
-        roomId={roomId}
-        onExit={(msg) => {
-          setNotice(msg);
-          setRoomId(null);
-        }}
+      <Recorder
+        roomId={room.room_id}
+        banner={
+          <View>
+            <View style={st.controlled}>
+              <View style={st.liveDot} />
+              <Text style={st.controlledText} numberOfLines={1}>
+                Đang được điều khiển từ xa · {room.room_name}
+              </Text>
+            </View>
+            {!sync.connected ? <Text style={st.offline}>Mất kết nối tới máy chủ, đang thử lại…</Text> : null}
+          </View>
+        }
+        footer={<LeaveButton roomId={room.room_id} />}
       />
     );
+  }
+
+  if (solo)
+    return (
+      <Recorder
+        roomId={null}
+        banner={
+          <View style={st.soloBanner}>
+            <Text style={st.soloText}>Quay độc lập (không trong phòng)</Text>
+          </View>
+        }
+        footer={
+          <Pressable onPress={() => setSolo(false)} style={st.smallBtn} accessibilityRole="button">
+            <Text style={st.smallBtnText}>Đóng</Text>
+          </Pressable>
+        }
+      />
+    );
+
   return (
     <JoinRoom
-      notice={notice}
-      onJoined={(id) => {
-        setNotice(null);
-        setRoomId(id);
+      notice={sync.exitReason ? EXIT_TEXT[sync.exitReason as keyof typeof EXIT_TEXT] ?? null : null}
+      onJoined={async () => {
+        sync.clearExitReason();
+        await sync.refresh();
       }}
+      onSolo={() => setSolo(true)}
     />
   );
 }
 
+function LeaveButton({ roomId }: { roomId: string }) {
+  const sync = useSync();
+  return (
+    <Pressable
+      style={st.smallBtn}
+      accessibilityRole="button"
+      onPress={() =>
+        Alert.alert('Rời phòng?', 'Controller sẽ không điều khiển được thiết bị này nữa.', [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Rời phòng',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.leaveRoom(roomId);
+                await sync.refresh();
+              } catch (e) {
+                Alert.alert('Lỗi', errText(e));
+              }
+            },
+          },
+        ])
+      }
+    >
+      <Text style={[st.smallBtnText, { color: colors.danger }]}>Rời phòng</Text>
+    </Pressable>
+  );
+}
+
 // ---------------- Tham gia phòng ----------------
-function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (roomId: string) => void }) {
+function JoinRoom({ notice, onJoined, onSolo }: { notice: string | null; onJoined: () => Promise<void>; onSolo: () => void }) {
   const nav = useNav();
   const [code, setCode] = useState('');
   const [cameraName, setCameraName] = useState(nav.session?.device?.camera_name ?? 'Cam 01');
@@ -69,8 +125,8 @@ function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (room
       setError(null);
       const body = { invite_code: inviteCode, device_id: device.device_id, camera_name: cameraName.trim(), grant_control: true as const };
       try {
-        const r = await api.joinRoom(body);
-        onJoined(r.room_id);
+        await api.joinRoom(body);
+        await onJoined();
       } catch (e) {
         if (e instanceof ApiError && e.code === '2003') {
           const old = (e.data as { room_id?: string } | null)?.room_id;
@@ -81,18 +137,18 @@ function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (room
               onPress: async () => {
                 try {
                   if (old) await api.leaveRoom(old);
-                  const r = await api.joinRoom(body);
-                  onJoined(r.room_id);
+                  await api.joinRoom(body);
+                  await onJoined();
                 } catch (err) {
                   setError(errText(err));
                 }
               },
             },
           ]);
-        } else {
-          setError(e instanceof ApiError && e.code === '2001' ? 'Mã mời không đúng hoặc đã hết hạn. Hãy xin mã mới từ Controller.' : errText(e));
-          if (e instanceof ApiError && e.code === '2001') setCode('');
-        }
+        } else if (e instanceof ApiError && e.code === '2001') {
+          setError('Mã mời không đúng hoặc đã hết hạn. Hãy xin mã mới từ Controller.');
+          setCode('');
+        } else setError(errText(e));
       } finally {
         setBusy(false);
       }
@@ -101,7 +157,7 @@ function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (room
   );
 
   return (
-    <View style={st.pad}>
+    <ScrollView contentContainerStyle={st.pad} keyboardShouldPersistTaps="handled">
       <Text style={st.h1}>Tham gia phòng</Text>
       <Text style={st.sub}>Nhập mã 6 ký tự hoặc quét mã QR hiển thị trên máy Controller.</Text>
       {notice ? <Banner text={notice} /> : null}
@@ -114,6 +170,7 @@ function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (room
       </View>
       {error ? <Banner text={error} tone="error" /> : null}
       <Button title="Tham gia phòng" onPress={() => join(code)} loading={busy} disabled={code.length !== 6 || !consent} />
+      <Button title="Quay độc lập" variant="ghost" onPress={onSolo} style={{ marginTop: 8 }} />
       <QrScanner
         visible={scanning}
         onClose={() => setScanning(false)}
@@ -123,121 +180,23 @@ function JoinRoom({ notice, onJoined }: { notice: string | null; onJoined: (room
           if (!consent) setError('Đã quét mã. Bật đồng ý cấp quyền điều khiển rồi bấm Tham gia phòng.');
         }}
       />
-    </View>
-  );
-}
-
-// ---------------- Đang ở trong phòng ----------------
-function InRoom({ roomId, onExit }: { roomId: string; onExit: (msg: string | null) => void }) {
-  const nav = useNav();
-  const [roomName, setRoomName] = useState('');
-  const [members, setMembers] = useState<RoomMember[]>([]);
-  const [offline, setOffline] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const myDevice = nav.session?.device?.device_id;
-
-  useEffect(() => {
-    let stop = false;
-    const tick = async () => {
-      try {
-        const d = await api.getRoomMembers(roomId);
-        if (stop) return;
-        setRoomName(d.room_name);
-        setMembers(d.members);
-        setOffline(false);
-      } catch (e) {
-        if (stop) return;
-        if (e instanceof ApiError && e.code === '2005') onExit('Phòng đã đóng. Thiết bị chuyển về chế độ độc lập.');
-        else if (e instanceof ApiError && e.code === '1009') {
-          const reason = (e.data as { reason?: string } | null)?.reason;
-          onExit(reason === 'kicked' ? 'Bạn đã bị Controller loại khỏi phòng.' : 'Thiết bị không còn ở trong phòng.');
-        } else if (e instanceof ApiError && e.code === 'NETWORK') setOffline(true);
-      }
-    };
-    tick();
-    const t = setInterval(tick, POLL_MS);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, [roomId, onExit]);
-
-  function leave() {
-    Alert.alert('Rời phòng?', 'Controller sẽ không điều khiển được thiết bị này nữa.', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Rời phòng',
-        style: 'destructive',
-        onPress: async () => {
-          setLeaving(true);
-          try {
-            await api.leaveRoom(roomId);
-            onExit(null);
-          } catch (e) {
-            Alert.alert('Lỗi', errText(e));
-          } finally {
-            setLeaving(false);
-          }
-        },
-      },
-    ]);
-  }
-
-  return (
-    <View style={st.pad}>
-      <View style={st.controlled}>
-        <View style={st.recDot} />
-        <Text style={st.controlledText}>Đang được điều khiển từ xa</Text>
-      </View>
-      {offline ? <Banner text="Mất kết nối tới máy chủ, đang thử lại…" tone="error" /> : null}
-      <Text style={st.h1}>{roomName || 'Phòng'}</Text>
-      <Text style={st.sub}>Thiết bị đang chờ lệnh quay từ Controller. Giữ ứng dụng mở trong suốt buổi quay.</Text>
-      <Text style={st.section}>THIẾT BỊ TRONG PHÒNG ({members.length})</Text>
-      {members.map((m, i) => (
-        <View key={m.member_id} style={st.member}>
-          <View style={[st.dot, { backgroundColor: m.is_online === '1' ? colors.ok : colors.muted }]} />
-          <Text style={st.memberName}>
-            Cam {String(i + 1).padStart(2, '0')} · {m.camera_name}
-          </Text>
-          {m.device_id === myDevice ? <Text style={st.me}>Máy này</Text> : null}
-        </View>
-      ))}
-      <View style={{ flex: 1, minHeight: 24 }} />
-      <Button title="Rời phòng" variant="danger" onPress={leave} loading={leaving} />
-    </View>
+    </ScrollView>
   );
 }
 
 const st = StyleSheet.create({
-  pad: { flex: 1, padding: 20 },
+  pad: { padding: 20, flexGrow: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   h1: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 6 },
   sub: { color: colors.muted, fontSize: 14, lineHeight: 20, marginBottom: 16 },
-  consent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-  },
+  consent: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 16 },
   consentText: { color: colors.text, flex: 1, fontSize: 14, lineHeight: 20 },
-  controlled: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.danger,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 18,
-  },
-  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
-  controlledText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  section: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginTop: 8, marginBottom: 8 },
-  member: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  memberName: { color: colors.text, fontSize: 15, flex: 1 },
-  me: { color: colors.accent, fontSize: 12, fontWeight: '600' },
+  controlled: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.danger, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#fff' },
+  controlledText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
+  offline: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', marginTop: 6, padding: 6, borderRadius: 8, overflow: 'hidden', fontSize: 12, textAlign: 'center' },
+  soloBanner: { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  soloText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  smallBtn: { backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  smallBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });

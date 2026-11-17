@@ -18,6 +18,21 @@ function useCountdown(target: string | undefined) {
   return Math.max(0, Math.floor((Date.parse(target) - now) / 1000));
 }
 
+const gb = (bytes: number) => `${(bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 1)} GB`;
+
+function Battery({ level }: { level: number | null }) {
+  if (level === null || level < 0) return null;
+  const cls = level <= 20 ? 'low' : level <= 50 ? 'mid' : 'high';
+  return (
+    <span className={`battery ${cls}`} title="Pin">
+      <span className="battery-body">
+        <span style={{ width: `${level}%` }} />
+      </span>
+      {level}%
+    </span>
+  );
+}
+
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
 export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onLoggedOut: () => void }) {
@@ -68,7 +83,7 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
     let stop = false;
     const tick = async () => {
       try {
-        const d = await api.getRoomMembers(room.room_id);
+        const d = await api.syncRoom(room.room_id);
         if (!stop) {
           setMembers(d.members);
           setError(null);
@@ -169,29 +184,41 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
           <div className="empty-state">{busy ? 'Đang mở phòng…' : <button className="primary" onClick={openRoom}>Thử lại</button>}</div>
         ) : (
           <div className={`grid count-${Math.min(slots, 9)}`}>
-            {members.map((m, i) => (
-              <article key={m.member_id} className={`tile ${m.is_online === '1' ? 'online' : 'offline'}`}>
-                <div className="tile-head">
-                  <span className="pill">
-                    <span className={`dot ${m.is_online === '1' ? 'ok' : ''}`} />
-                    Cam {String(i + 1).padStart(2, '0')} · {m.camera_name}
-                  </span>
-                  <button className="icon-btn small" title="Loại khỏi phòng" onClick={() => kick(m)}>
-                    <CloseIcon size={14} />
-                  </button>
-                </div>
-                <div className="tile-body">
-                  <CameraIcon size={34} />
-                  <span>{m.is_online === '1' ? 'Sẵn sàng nhận lệnh' : 'Mất kết nối'}</span>
-                </div>
-                <div className="tile-foot">
-                  <span className="mono">
-                    {m.device_name} · {DEVICE_LABEL[m.device_type] ?? ''}
-                  </span>
-                  <span className={`badge ${m.is_online === '1' ? 'ok' : 'off'}`}>{m.is_online === '1' ? 'ONLINE' : 'OFFLINE'}</span>
-                </div>
-              </article>
-            ))}
+            {members.map((m, i) => {
+              const online = m.is_online === '1';
+              const s = m.state;
+              const rec = online && s?.is_recording === '1';
+              return (
+                <article key={m.member_id} className={`tile ${rec ? 'recording' : online ? 'online' : 'offline'}`}>
+                  <div className="tile-head">
+                    <span className="pill">
+                      <span className={`dot ${rec ? 'rec' : online ? 'ok' : ''}`} />
+                      Cam {String(i + 1).padStart(2, '0')} · {m.camera_name}
+                    </span>
+                    <span className="stats">
+                      {s ? <Battery level={s.battery_level} /> : null}
+                      {s?.free_storage_bytes != null ? <span title="Dung lượng trống">💾 {gb(s.free_storage_bytes)}</span> : null}
+                      <button className="icon-btn small" title="Loại khỏi phòng" onClick={() => kick(m)}>
+                        <CloseIcon size={14} />
+                      </button>
+                    </span>
+                  </div>
+                  <div className="tile-body">
+                    <CameraIcon size={34} />
+                    <span>
+                      {!online ? 'Mất kết nối' : rec ? 'Đang quay' : 'Sẵn sàng nhận lệnh'}
+                      {online && s ? ` · ${s.camera_facing === 'front' ? 'Camera trước' : 'Camera sau'}` : ''}
+                    </span>
+                  </div>
+                  <div className="tile-foot">
+                    <span className="mono">
+                      {s?.resolution ? `${s.resolution} · ${s.fps ?? 30}fps` : `${m.device_name} · ${DEVICE_LABEL[m.device_type] ?? ''}`}
+                    </span>
+                    <span className={`badge ${rec ? 'rec' : online ? 'ok' : 'off'}`}>{rec ? 'ON AIR' : online ? 'ONLINE' : 'OFFLINE'}</span>
+                  </div>
+                </article>
+              );
+            })}
             {Array.from({ length: slots - members.length }, (_, i) => (
               <article key={`empty-${i}`} className="tile empty">
                 <div className="tile-body">

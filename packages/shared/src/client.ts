@@ -175,6 +175,11 @@ export function createClient(opts: ClientOptions) {
       call<null>('DELETE', `/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(memberId)}`),
     leaveRoom: (roomId: string) => call<null>('POST', `/rooms/${encodeURIComponent(roomId)}/leave`, {}),
     closeRoom: (roomId: string) => call<null>('DELETE', `/rooms/${encodeURIComponent(roomId)}`),
+
+    // C — Đồng bộ trạng thái
+    syncDevice: (deviceId: string, b: T.SyncDeviceRequest) =>
+      call<T.SyncDeviceData>('POST', `/devices/${encodeURIComponent(deviceId)}/sync`, b),
+    syncRoom: (roomId: string) => call<T.SyncRoomData>('GET', `/rooms/${encodeURIComponent(roomId)}/sync`),
   };
 }
 
