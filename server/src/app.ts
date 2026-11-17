@@ -10,6 +10,7 @@ import { roomRoutes } from './modules/rooms.ts';
 import { recordingRoutes } from './modules/recording.ts';
 import { syncRoutes } from './modules/sync.ts';
 import { uploadRoutes } from './modules/uploads.ts';
+import { videoRoutes } from './modules/videos.ts';
 
 export const API_PREFIX = '/api';
 
@@ -73,6 +74,7 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promi
       syncRoutes(api, ctx);
       recordingRoutes(api, ctx);
       uploadRoutes(api, ctx);
+      videoRoutes(api, ctx);
     },
     { prefix: API_PREFIX },
   );

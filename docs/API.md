@@ -85,9 +85,24 @@ Remote không cần gọi get_room_members để biết mình bị kick hay phò
 
 **Phía server:** mảnh tạm ở `data/uploads/{upload_id}/`, video ở `data/videos/{video_id}.mp4` (+ `.jpg`). Phiên quá hạn được dọn mỗi 30 phút. Nếu có ffmpeg (`FFMPEG_PATH`), server remux bằng `-c copy -movflags +faststart` (không nén lại) và tự tạo ảnh thu nhỏ khi app không gửi.
 
-## E — Tuần 5
+## E — Thư viện video trên server (tuần 5)
 
-Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng slide: `/videos`, `/videos/{id}`, `/videos/{id}/download`, `/videos/bulk-delete`.
+| # | API | Method & path | Quyền | Tham số / kết quả |
+|---|---|---|---|---|
+| 24 | get_list_videos | `GET /videos?index=&count=&room_id=&recording_session_id=&device_id=` | Controller: mọi video; Remote: chỉ video của mình | `count` 1–100 (mặc định 20). Trả `videos[], total, index, count, has_more`. Mỗi video có `camera_name, device_name, owner, recording_session_id, session_started_at, recorded_at_ms, duration_ms, size_bytes, thumbnail_url`. `index ≥ total` → `9994` (kể cả trang đầu rỗng) |
+| 25 | get_video | `GET /videos/{video_id}` | như trên | Như một phần tử của danh sách + `stream_url` (link xem có hạn 1 giờ, chỉ Controller). Không thấy → `4001` |
+| 26 | get_download_url | `GET /videos/{video_id}/download` | Controller (`1009`) | `download_url` (hạn 1 giờ, tải về đúng tên file), `expires_at`. Đang có lượt tải chưa xong → `4002`: client xếp hàng đợi, xin link clip kế tiếp sau |
+| 27 | delete_video | `DELETE /videos/{video_id}` | Controller | Xóa bản ghi, file video và ảnh thu nhỏ. `4001` nếu không có |
+| 28 | delete_videos_bulk | `POST /videos/bulk-delete` | Controller | `video_ids[]` (1–50; quá 50 → `1004`). Trả `deleted[], not_found[]`; không xóa được clip nào → `4001` |
+
+**Link media (`/api/media/videos/{id}`, `/api/media/thumbs/{id}.jpg`):**
+- Ký bằng HMAC-SHA256 (khóa `MEDIA_SECRET` hoặc `data/media.secret` sinh tự động), kèm loại link (`stream` / `download` / `thumb`), người xin link và hạn dùng.
+- Đổi loại link, đổi video hoặc quá hạn → HTTP 403.
+- Dùng được trực tiếp trong `<video>`, `<img>` và link tải, vì trình duyệt không gửi được header `Authorization` cho các thẻ này.
+- Hỗ trợ `Range` (HTTP 206) để tua video.
+- Lượt tải (`download`) được đếm cho tới khi stream đóng; đó là căn cứ để trả mã 4002.
+
+**Xem đồng bộ nhiều góc quay (web):** các clip cùng `recording_session_id` được căn theo `recorded_at_ms` (giờ server lúc máy thực sự bắt đầu quay, xem tuần 3). Một đồng hồ chung điều khiển mọi `<video>`; video nào lệch quá 0,2 s thì được kéo về đúng vị trí. Bấm vào một khung để nghe tiếng của góc đó. Đo trên hai clip MP4 thật lệch nhau 400 ms: khi phát, độ lệch giữa hai video so với đồng hồ chung là 14 ms.
 
 ## Khác biệt nhỏ so với slide
 

@@ -290,3 +290,54 @@ export interface VideoInfo {
   recorded_at: string | null;
   created_at: string;
 }
+
+// ===== E — Thư viện video trên server (tuần 5) =====
+
+export interface LibraryVideo {
+  video_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  duration_ms: number | null;
+  checksum_sha256: string;
+  room_id: string | null;
+  recording_session_id: string | null;
+  /** Giờ hẹn bắt đầu của buổi quay (giờ server) */
+  session_started_at: string | null;
+  device_id: string | null;
+  device_name: string | null;
+  device_type: DeviceType | null;
+  camera_name: string | null;
+  owner: { user_id: string; name: string };
+  /** Giờ bắt đầu quay thực tế theo giờ server — dùng để căn khớp các góc quay */
+  recorded_at: string | null;
+  recorded_at_ms: number | null;
+  created_at: string;
+  thumbnail_url: string | null;
+}
+
+export interface VideoListQuery {
+  index?: number;
+  count?: number;
+  room_id?: string;
+  recording_session_id?: string;
+  device_id?: string;
+}
+
+export interface VideoList {
+  videos: LibraryVideo[];
+  total: number;
+  index: number;
+  count: number;
+  has_more: '0' | '1';
+}
+
+export type VideoDetail = LibraryVideo & { stream_url: string | null; stream_expires_at: string | null };
+
+export interface DownloadLink {
+  video_id: string;
+  file_name: string;
+  size_bytes: number;
+  download_url: string;
+  expires_at: string;
+}

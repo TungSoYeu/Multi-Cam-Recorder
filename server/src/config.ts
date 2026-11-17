@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 
 export interface Config {
@@ -26,6 +28,9 @@ export interface Config {
   uploadTtlSec: number;
   /** Đường dẫn ffmpeg để remux sang MP4 chuẩn; null = không dùng */
   ffmpegPath: string | null;
+  /** Khóa ký link xem/tải video (HMAC). Lấy từ MEDIA_SECRET hoặc sinh và lưu trong DATA_DIR. */
+  mediaSecret: string;
+  downloadUrlTtlSec: number;
   controller: {
     email: string;
     phone: string;
@@ -64,6 +69,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     maxChunkBytes: 8 * 1024 * 1024,
     uploadTtlSec: 24 * 3600,
     ffmpegPath: env.FFMPEG_PATH === 'none' ? null : (env.FFMPEG_PATH ?? 'ffmpeg'),
+    mediaSecret: env.MEDIA_SECRET || '',
+    downloadUrlTtlSec: 3600,
     controller: {
       email: (env.CONTROLLER_EMAIL ?? 'controller@multicam.local').toLowerCase(),
       phone: env.CONTROLLER_PHONE ?? '0900000000',
@@ -72,5 +79,26 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       lastName: env.CONTROLLER_LAST_NAME ?? 'Controller',
     },
   };
-  return { ...base, ...overrides };
+  const cfg = { ...base, ...overrides };
+  if (!cfg.mediaSecret) cfg.mediaSecret = loadOrCreateSecret(cfg.dataDir);
+  return cfg;
+}
+
+/** Khóa ký link media: giữ nguyên qua các lần khởi động để link đã phát còn dùng được. */
+function loadOrCreateSecret(dir: string): string {
+  const file = path.join(dir, 'media.secret');
+  try {
+    const s = fs.readFileSync(file, 'utf8').trim();
+    if (s.length >= 32) return s;
+  } catch {
+    /* chưa có */
+  }
+  const s = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, s, { mode: 0o600 });
+  } catch {
+    /* không ghi được thì dùng khóa tạm trong bộ nhớ */
+  }
+  return s;
 }

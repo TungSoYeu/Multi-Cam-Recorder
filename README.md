@@ -20,7 +20,10 @@ Một máy **Controller** (web trên laptop) điều khiển nhiều máy **Remo
   máy lỡ lệnh tự khớp theo trạng thái phòng, Controller đổi camera trước/sau từ xa. Cơ chế chi tiết: [docs/API.md](docs/API.md#cơ-chế-startstop-đồng-bộ).
 - ✅ **Tuần 4**: dừng quay là tự upload theo mảnh 5 MB (SHA-256 từng mảnh và toàn file), resume khi mất mạng / tắt app, chống upload trùng,
   giới hạn 1 GB và hạn mức lưu trữ. Thư viện trên app hiện tiến độ từng clip; Controller thấy "⬆ n clip · %" trên từng máy và số clip đã lên server.
-- ⏳ Tuần 5: Controller xem / tải / xóa video trên server.
+- ✅ **Tuần 5**: trang Thư viện trên web: clip gom theo buổi quay, xem (tua được), tải về theo hàng đợi (4002), xóa một / nhiều clip,
+  **xem đồng bộ mọi góc quay của một buổi** căn theo giờ bắt đầu quay thực tế. Link xem/tải ký HMAC, có hạn dùng.
+
+**Đã đủ 28/28 API và 15/15 chức năng của đề.** Thêm 2 API mở rộng: `GET /users/me` (khôi phục giao diện) và đổi camera từ xa.
 
 ## Chạy lần đầu (Windows, PowerShell)
 
@@ -68,7 +71,7 @@ Mỗi lần chạy lại cloudflared, URL sẽ đổi. Muốn URL cố định t
 ## Kiểm tra
 
 ```powershell
-npm test          # 44 test: auth, phòng, sync, Start/Stop, đồng hồ, upload, migration, MP4
+npm test          # 50 test: auth, phòng, sync, Start/Stop, đồng hồ, upload, thư viện, migration, MP4
 npm run typecheck # shared, server, web, mobile
 ```
 
@@ -100,6 +103,14 @@ winget install Gyan.FFmpeg
 ```
 
 Mở lại terminal rồi chạy lại server; dòng `ffmpeg:` trong log khởi động cho biết server có dùng được ffmpeg hay không.
+
+## Kiểm thử tuần 5
+
+1. Sau khi quay một buổi bằng 2 máy và upload xong, trên web bấm **Thư viện** ở thanh dưới.
+2. Các clip được gom theo "Buổi quay hh:mm"; chạm một clip để xem, tua được; xem chi tiết camera, thiết bị, người quay, SHA-256.
+3. **▶ Xem đồng bộ**: các góc phát cùng lúc, mỗi khung hiện độ lệch "+x ms"; bấm vào khung để nghe tiếng của góc đó.
+4. **Chọn** → chọn nhiều clip → **Tải về** (tải lần lượt; Chrome có thể hỏi "cho phép tải nhiều file") hoặc **Xóa**.
+5. Đăng nhập Remote: tab Thư viện chỉ có clip trên máy, không có chức năng tải từ server (đúng yêu cầu đề).
 
 ## Kiểm thử tuần 4
 

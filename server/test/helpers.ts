@@ -19,6 +19,7 @@ export async function setup() {
     uploadDir: path.join(tmp, 'uploads'),
     videoDir: path.join(tmp, 'videos'),
     ffmpegPath: null,
+    mediaSecret: 'test-secret-0123456789abcdef0123456789',
     defaultChunkBytes: 256 * 1024,
     webDist: null,
     returnVerifyCode: true,
