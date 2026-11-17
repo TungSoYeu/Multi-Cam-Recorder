@@ -2,36 +2,63 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import type { CameraFacing } from '@multicam/shared';
+import type { CameraFacing, DeviceCommand, RecordingState } from '@multicam/shared';
 import { Button } from '../components/ui';
-import { cameraState } from '../sync';
+import { cameraState, clock, useCommandHandler } from '../sync';
 import { colors } from '../theme';
 import { formatDuration, saveRecording } from '../video/library';
 
 const KEEP_AWAKE_TAG = 'recorder';
+/** Máy lỡ lệnh Start: chờ thêm 1 giây sau giờ hẹn rồi mới tự bắt đầu theo trạng thái phòng. */
+const LATE_START_GRACE_MS = 1000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Màn quay video. người dùng tự bấm quay/dừng trên máy.
- * lệnh Start/Stop/đổi camera từ Controller sẽ gọi cùng các hàm start()/stop()/flip().
+ * Màn quay video.
+ * - Quay độc lập (controlled = false): người dùng tự bấm quay/dừng.
+ * - Trong phòng (controlled = true): Controller điều khiển bằng lệnh có hẹn giờ; nút quay trên máy bị khóa.
+ *   Nếu lỡ lệnh, máy tự khớp theo `roomRecording` (trạng thái quay của phòng từ sync_device).
  */
-export function Recorder({ banner, roomId, footer }: { banner: ReactNode; roomId: string | null; footer?: ReactNode }) {
+export function Recorder({
+  banner,
+  roomId,
+  footer,
+  controlled = false,
+  roomRecording = null,
+}: {
+  banner: ReactNode;
+  roomId: string | null;
+  footer?: ReactNode;
+  controlled?: boolean;
+  roomRecording?: RecordingState | null;
+}) {
   const [camPerm, requestCam] = useCameraPermissions();
   const [micPerm, requestMic] = useMicrophonePermissions();
+  const granted = !!camPerm?.granted && !!micPerm?.granted;
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
   const [facing, setFacing] = useState<CameraFacing>(cameraState.facing);
   const [recording, setRecording] = useState(false);
+  const recordingRef = useRef(false);
+  /** Phiên quay của phòng mà máy đang/đã quay — tránh bắt đầu lại cùng phiên */
+  const sessionRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const startedAt = useRef(0);
+
+  const markReady = (v: boolean) => {
+    readyRef.current = v;
+    setReady(v);
+  };
 
   useEffect(() => {
     activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => undefined);
     return () => {
       deactivateKeepAwake(KEEP_AWAKE_TAG);
-      if (cameraState.isRecording) camera.current?.stopRecording();
-      cameraState.isRecording = false;
+      if (recordingRef.current) camera.current?.stopRecording();
     };
   }, []);
 
@@ -41,52 +68,123 @@ export function Recorder({ banner, roomId, footer }: { banner: ReactNode; roomId
     return () => clearInterval(t);
   }, [recording]);
 
-  async function start() {
-    if (!camera.current || !ready || recording || saving) return;
-    startedAt.current = Date.now();
-    setElapsed(0);
-    setLastSaved(null);
-    setRecording(true);
+  async function waitReady(timeoutMs = 3000) {
+    const end = Date.now() + timeoutMs;
+    while (!readyRef.current && Date.now() < end) await sleep(50);
+    return readyRef.current;
+  }
+
+  /** Bắt đầu quay. Trả true nếu camera đã nhận lệnh quay. */
+  function begin(sessionId: string | null): boolean {
+    if (!camera.current || !readyRef.current || recordingRef.current) return false;
+    recordingRef.current = true;
     cameraState.isRecording = true;
-    const facingAtStart = facing;
-    try {
-      // iPhone: ép H.264 để file phát được trên mọi trình duyệt (HEVC không phát được trên Chrome/Windows)
-      const result = await camera.current.recordAsync(Platform.OS === 'ios' ? { codec: 'avc1' } : {});
-      const durationMs = Date.now() - startedAt.current;
-      setRecording(false);
-      cameraState.isRecording = false;
-      if (!result?.uri) return;
-      setSaving(true);
-      const clip = await saveRecording(result.uri, { startedAt: startedAt.current, durationMs, facing: facingAtStart, roomId });
-      setLastSaved(`Đã lưu ${clip.file_name}`);
-    } catch (e) {
-      Alert.alert('Không quay được', e instanceof Error ? e.message : String(e));
-    } finally {
-      setRecording(false);
-      setSaving(false);
-      cameraState.isRecording = false;
-    }
+    sessionRef.current = sessionId;
+    startedAt.current = Date.now();
+    const startedAtServer = clock.serverNow();
+    const facingAtStart = cameraState.facing;
+    setElapsed(0);
+    setMessage(null);
+    setRecording(true);
+    // iPhone: ép H.264 để file phát được trên mọi trình duyệt (HEVC không phát được trên Chrome/Windows)
+    camera.current
+      .recordAsync(Platform.OS === 'ios' ? { codec: 'avc1' } : {})
+      .then(async (result) => {
+        const durationMs = Date.now() - startedAt.current;
+        recordingRef.current = false;
+        cameraState.isRecording = false;
+        setRecording(false);
+        if (!result?.uri) return;
+        setSaving(true);
+        const clip = await saveRecording(result.uri, {
+          startedAt: startedAt.current,
+          durationMs,
+          facing: facingAtStart,
+          roomId,
+          recordingSessionId: sessionId,
+          startedAtServerMs: sessionId ? startedAtServer : null,
+        });
+        setMessage(`Đã lưu ${clip.file_name}`);
+      })
+      .catch((e: unknown) => {
+        setMessage(`Lỗi quay: ${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        recordingRef.current = false;
+        cameraState.isRecording = false;
+        setRecording(false);
+        setSaving(false);
+      });
+    return true;
   }
 
-  function stop() {
-    if (recording) camera.current?.stopRecording();
+  function end() {
+    if (recordingRef.current) camera.current?.stopRecording();
   }
 
-  function flip() {
-    if (recording) return;
-    const next = facing === 'back' ? 'front' : 'back';
-    setReady(false);
-    setFacing(next);
+  function changeFacing(next: CameraFacing) {
+    if (recordingRef.current || next === cameraState.facing) return;
+    markReady(false);
     cameraState.facing = next;
+    setFacing(next);
   }
+
+  // ---------- Lệnh từ Controller ----------
+  useCommandHandler(
+    controlled && granted
+      ? async (cmd: DeviceCommand) => {
+          const wait = clock.toLocal(cmd.execute_at_ms) - Date.now();
+          if (cmd.type === 'start_recording' && wait > 0) setMessage(`Bắt đầu quay sau ${Math.ceil(wait / 1000)} giây…`);
+          if (wait > 0) await sleep(Math.min(wait, 10_000));
+          switch (cmd.type) {
+            case 'start_recording':
+              if (recordingRef.current) return 'done';
+              if (sessionRef.current === cmd.recording_session_id) return 'done';
+              if (!(await waitReady())) return 'failed';
+              return begin(cmd.recording_session_id ?? null) ? 'done' : 'failed';
+            case 'stop_recording':
+              end();
+              return 'done';
+            case 'switch_camera':
+              if (recordingRef.current || !cmd.camera_facing) return 'failed';
+              changeFacing(cmd.camera_facing);
+              return 'done';
+            default:
+              return 'failed';
+          }
+        }
+      : null,
+  );
+
+  // ---------- Tự khớp với trạng thái quay của phòng (máy lỡ lệnh / vào phòng muộn) ----------
+  useEffect(() => {
+    if (!controlled || !granted) return;
+    const r = roomRecording;
+    // Đã có lệnh dừng: máy đang quay phiên này dừng đúng giờ hẹn (phòng khi lỡ lệnh Stop)
+    if (r?.stop_at_ms) {
+      if (!recordingRef.current || sessionRef.current !== r.recording_session_id) return;
+      const t = setTimeout(end, Math.max(0, clock.toLocal(r.stop_at_ms) - Date.now()));
+      return () => clearTimeout(t);
+    }
+    if (r && !recordingRef.current && sessionRef.current !== r.recording_session_id) {
+      const dueIn = clock.toLocal(r.started_at_ms + LATE_START_GRACE_MS) - Date.now();
+      const t = setTimeout(() => {
+        if (!recordingRef.current && sessionRef.current !== r.recording_session_id) {
+          waitReady().then((ok) => ok && begin(r.recording_session_id));
+        }
+      }, Math.max(0, dueIn));
+      return () => clearTimeout(t);
+    }
+    if (!r && recordingRef.current && sessionRef.current) end();
+  }, [controlled, granted, roomRecording?.recording_session_id, roomRecording?.stop_at_ms]);
 
   if (!camPerm || !micPerm) return <View style={st.fill} />;
-  if (!camPerm.granted || !micPerm.granted) {
+  if (!granted) {
     return (
       <View style={[st.fill, st.center]}>
         {banner}
         <Text style={st.permTitle}>Cần quyền camera và micro</Text>
-        <Text style={st.permText}>Ứng dụng cần camera và micro để quay video có tiếng.</Text>
+        <Text style={st.permText}>Ứng dụng cần camera và micro để quay video có tiếng{controlled ? ' khi Controller ra lệnh' : ''}.</Text>
         <Button
           title="Cấp quyền"
           onPress={async () => {
@@ -102,6 +200,7 @@ export function Recorder({ banner, roomId, footer }: { banner: ReactNode; roomId
     );
   }
 
+  const idleHint = controlled ? 'Chờ lệnh quay từ Controller' : `1080p · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`;
   return (
     <View style={st.fill}>
       <CameraView
@@ -111,7 +210,7 @@ export function Recorder({ banner, roomId, footer }: { banner: ReactNode; roomId
         mode="video"
         videoQuality="1080p"
         mute={false}
-        onCameraReady={() => setReady(true)}
+        onCameraReady={() => markReady(true)}
         onMountError={(e) => Alert.alert('Lỗi camera', e.message)}
       />
       <View style={st.top}>{banner}</View>
@@ -122,23 +221,23 @@ export function Recorder({ banner, roomId, footer }: { banner: ReactNode; roomId
             <Text style={st.recText}>{formatDuration(elapsed)}</Text>
           </View>
         ) : (
-          <Text style={st.hint}>{saving ? 'Đang lưu…' : lastSaved ?? `1080p · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`}</Text>
+          <Text style={st.hint}>{saving ? 'Đang lưu…' : message ?? idleHint}</Text>
         )}
       </View>
       <View style={st.controls}>
         <View style={st.side}>{footer}</View>
         <Pressable
-          onPress={recording ? stop : start}
-          disabled={!ready || saving}
-          style={[st.shutter, (!ready || saving) && { opacity: 0.5 }]}
+          onPress={() => (recording ? end() : begin(null))}
+          disabled={controlled || !ready || saving}
+          style={[st.shutter, (controlled || !ready || saving) && { opacity: controlled ? 0.35 : 0.5 }]}
           accessibilityRole="button"
-          accessibilityLabel={recording ? 'Dừng quay' : 'Bắt đầu quay'}
+          accessibilityLabel={controlled ? 'Controller điều khiển quay' : recording ? 'Dừng quay' : 'Bắt đầu quay'}
         >
           <View style={recording ? st.stopSquare : st.recCircle} />
         </Pressable>
         <View style={st.side}>
           <Pressable
-            onPress={flip}
+            onPress={() => changeFacing(facing === 'back' ? 'front' : 'back')}
             disabled={recording}
             style={[st.roundBtn, recording && { opacity: 0.35 }]}
             accessibilityRole="button"

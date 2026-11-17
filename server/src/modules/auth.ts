@@ -147,6 +147,9 @@ export function closeOwnerRooms(ctx: Ctx, ownerId: string) {
   for (const r of rooms) {
     ctx.db.prepare(`UPDATE rooms SET status = 'closed', closed_at = ? WHERE id = ?`).run(now, r.id);
     ctx.db
+      .prepare(`UPDATE recording_sessions SET status = 'stopped', stopped_at = ? WHERE room_id = ? AND status = 'recording'`)
+      .run(now, r.id);
+    ctx.db
       .prepare(`UPDATE room_members SET left_at = ?, left_reason = 'closed' WHERE room_id = ? AND left_at IS NULL`)
       .run(now, r.id);
   }

@@ -15,6 +15,10 @@ export interface LocalClip {
   created_at: number;
   camera_facing: CameraFacing;
   room_id: string | null;
+  /** Phiên quay đồng bộ của phòng (null nếu quay độc lập) — để ghép các góc quay cùng buổi */
+  recording_session_id: string | null;
+  /** Thời điểm bắt đầu thực tế theo giờ server — để căn khớp các clip */
+  started_at_server_ms: number | null;
   container: 'mp4' | 'mov';
   uploaded: boolean;
 }
@@ -95,7 +99,14 @@ function normalizeToMp4(file: File): 'mp4' | 'mov' {
 /** Lưu file vừa quay (trong cache của camera) vào thư viện của ứng dụng. */
 export async function saveRecording(
   tmpUri: string,
-  meta: { startedAt: number; durationMs: number; facing: CameraFacing; roomId: string | null },
+  meta: {
+    startedAt: number;
+    durationMs: number;
+    facing: CameraFacing;
+    roomId: string | null;
+    recordingSessionId: string | null;
+    startedAtServerMs: number | null;
+  },
 ): Promise<LocalClip> {
   ensureDir();
   const clips = await readIndex();
@@ -126,6 +137,8 @@ export async function saveRecording(
     created_at: meta.startedAt,
     camera_facing: meta.facing,
     room_id: meta.roomId,
+    recording_session_id: meta.recordingSessionId,
+    started_at_server_ms: meta.startedAtServerMs,
     container,
     uploaded: false,
   };

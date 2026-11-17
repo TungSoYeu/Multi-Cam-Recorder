@@ -41,8 +41,21 @@ Base URL: `http://<máy chủ>:3000/api` (hoặc `https://xxxx.trycloudflare.com
 
 | # | API | Method & path | Quyền | Tham số / kết quả |
 |---|---|---|---|---|
-| 16 | sync_device | `POST /devices/{device_id}/sync` | Thiết bị của phiên hiện tại (khác → `1009`) | Gửi mỗi `interval_ms` (2 giây): `camera_facing` (`front\|back`), `is_recording`, `battery_level` (0–100, -1 nếu không đọc được), `free_storage_bytes`, `resolution`, `fps`. Trả `server_time, server_time_ms, interval_ms, room{room_id, room_name, member_id} \| null, last_left_reason` (`kicked\|closed\|left\|logout`), `commands[]` () |
-| 17 | sync_room | `GET /rooms/{room_id}/sync` | Chủ phòng (`1009` / `2004`), phòng đóng → `2005` | `room_id, room_name, invite_code, expires_at, max_members, server_time, total, online, recording`, `members[]` (như get_room_members, mỗi máy có thêm `last_seen_at` và `state{camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps, updated_at}`; `state = null` nếu máy chưa sync lần nào) |
+| 16 | sync_device | `POST /devices/{device_id}/sync` | Thiết bị của phiên hiện tại (khác → `1009`) | Gửi mỗi `interval_ms` (**1 giây** khi ở trong phòng, 3 giây khi không): `camera_facing` (`front\|back`), `is_recording`, `battery_level` (0–100, -1 nếu không đọc được), `free_storage_bytes`, `resolution`, `fps`, `acks[{command_id, status: done\|failed}]`. Trả `server_time_ms, interval_ms, room{room_id, room_name, member_id} \| null, last_left_reason` (`kicked\|closed\|left\|logout`), `recording` (trạng thái quay của phòng), `commands[]` (lệnh chưa ACK) |
+| 17 | sync_room | `GET /rooms/{room_id}/sync` | Chủ phòng (`1009` / `2004`), phòng đóng → `2005` | `room_id, room_name, invite_code, expires_at, max_members, server_time_ms, total, online, recording`, `members[]` (như get_room_members, mỗi máy có thêm `last_seen_at`, `state{camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps, updated_at}` và `last_command{type, status: pending\|done\|failed}`) |
+| 18 | start_recording | `POST /rooms/{room_id}/recording/start` | Chủ phòng | `client_command_id` (bắt buộc, sinh mới cho mỗi lần bấm). Tạo phiên quay `rs_…` và lệnh hẹn giờ `execute_at = now + 2,5 s`. Trả `recording_session_id, command_id, execute_at_ms, server_time_ms, total_devices`. Lỗi: `1010` lệnh trùng (kèm kết quả cũ; coi như thành công), `2006` phòng đang quay, `9994` phòng chưa có máy |
+| 19 | stop_recording | `POST /rooms/{room_id}/recording/stop` | Chủ phòng | `client_command_id`. Lệnh dừng hẹn `now + 1,5 s`. Trả thêm `duration_ms`. `2006` nếu phòng không quay |
+| + | switch_camera | `POST /rooms/{room_id}/members/{member_id}/camera` | Chủ phòng | `camera_facing, client_command_id`. Lệnh riêng cho một máy; `2006` khi đang quay. Mở rộng cho chức năng "Controller điều khiển việc lật camera" (đề bài không có API riêng) |
+
+### Cơ chế Start/Stop đồng bộ
+
+1. Controller gọi start_recording. Server lưu phiên quay và một lệnh chung cho cả phòng, hẹn giờ thực hiện `execute_at`.
+2. Mỗi Remote sync 1 giây/lần và nhận lệnh. Từ `server_time_ms` của các lần sync, Remote ước lượng lệch đồng hồ so với server (giữ mẫu có độ trễ mạng thấp nhất, xem `ClockSync` trong `packages/shared/src/client.ts`), rồi đổi `execute_at_ms` sang giờ máy mình và bắt đầu quay đúng lúc đó.
+3. Remote gửi ACK ở lần sync kế tiếp; Controller thấy "đã thực hiện / chờ máy nhận / thất bại" trên từng ô camera.
+4. **Tự khớp trạng thái:** `sync_device` luôn trả `recording` của phòng. Máy lỡ lệnh (mất mạng, vào phòng muộn) sẽ tự bắt đầu quay sau giờ hẹn 1 giây. Nếu phòng đã có lệnh dừng, `recording.stop_at_ms` cho biết giờ hẹn dừng để máy dừng đúng lúc. Lệnh quá 30 giây không được giao nữa.
+5. Mỗi clip lưu `recording_session_id` và `started_at_server_ms` để ghép các góc quay của cùng một buổi.
+
+Đo bằng trình giả lập hai máy có đồng hồ lệch +3 s và −1,2 s: hai máy bắt đầu cách nhau 32 ms, dừng cách nhau 31 ms. Sai số tối đa xấp xỉ một nửa RTT khi mạng bất đối xứng.
 
 Remote không cần gọi get_room_members để biết mình bị kick hay phòng bị đóng: `sync_device` trả `room = null` kèm `last_left_reason`.
 
@@ -54,7 +67,7 @@ Remote không cần gọi get_room_members để biết mình bị kick hay phò
 
 ## D, E
 
-Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng đề bài: `/rooms/{id}/recording/start|stop`, `/videos/uploads...`, `/videos...`.
+Chưa triển khai. Gọi các route này sẽ nhận `9997`. Đường dẫn giữ đúng đề bài: `/videos/uploads...`, `/videos...`.
 
 ## Khác biệt nhỏ so với đề bài
 

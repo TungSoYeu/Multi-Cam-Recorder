@@ -116,6 +116,35 @@ export interface RoomMember {
   state: DeviceState | null;
 }
 
+export type CommandType = 'start_recording' | 'stop_recording' | 'switch_camera';
+
+export interface DeviceCommand {
+  command_id: string;
+  type: CommandType;
+  target_device_id: string | null;
+  /** Thời điểm (giờ server) mọi máy cùng thực hiện */
+  execute_at: string;
+  execute_at_ms: number;
+  created_at: string;
+  recording_session_id?: string;
+  camera_facing?: CameraFacing;
+}
+
+export interface CommandAck {
+  command_id: string;
+  status: 'done' | 'failed';
+}
+
+export interface RecordingState {
+  recording_session_id: string;
+  status: 'recording' | 'stopped';
+  started_at: string;
+  started_at_ms: number;
+  /** Giờ hẹn dừng (đã có lệnh Stop nhưng chưa tới giờ), null nếu đang quay */
+  stop_at: string | null;
+  stop_at_ms: number | null;
+}
+
 export interface SyncDeviceRequest {
   camera_facing: CameraFacing;
   is_recording: boolean;
@@ -123,6 +152,7 @@ export interface SyncDeviceRequest {
   free_storage_bytes?: number;
   resolution?: string;
   fps?: number;
+  acks?: CommandAck[];
 }
 
 export type LeftReason = 'kicked' | 'closed' | 'left' | 'logout';
@@ -133,8 +163,20 @@ export interface SyncDeviceData {
   interval_ms: number;
   room: { room_id: string; room_name: string; member_id: string } | null;
   last_left_reason: LeftReason | null;
-  /** Lệnh điều khiển quay */
-  commands: unknown[];
+  /** Phòng đang quay (null nếu không) — để máy lỡ lệnh tự khớp */
+  recording: RecordingState | null;
+  commands: DeviceCommand[];
+}
+
+export interface CommandResult {
+  command_id: string;
+  recording_session_id: string;
+  status: 'recording' | 'stopped';
+  execute_at: string;
+  execute_at_ms: number;
+  server_time_ms: number;
+  total_devices?: number;
+  duration_ms?: number;
 }
 
 export interface SyncRoomData {
@@ -148,8 +190,10 @@ export interface SyncRoomData {
   interval_ms: number;
   total: number;
   online: number;
-  recording: null;
-  members: RoomMember[];
+  recording: RecordingState | null;
+  members: (RoomMember & {
+    last_command: { command_id: string; type: CommandType; status: 'pending' | 'done' | 'failed' } | null;
+  })[];
 }
 
 export interface RoomData {

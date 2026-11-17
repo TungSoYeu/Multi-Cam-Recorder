@@ -180,7 +180,57 @@ export function createClient(opts: ClientOptions) {
     syncDevice: (deviceId: string, b: T.SyncDeviceRequest) =>
       call<T.SyncDeviceData>('POST', `/devices/${encodeURIComponent(deviceId)}/sync`, b),
     syncRoom: (roomId: string) => call<T.SyncRoomData>('GET', `/rooms/${encodeURIComponent(roomId)}/sync`),
+
+    // Điều khiển quay. Mã 1010 (lệnh trùng do mạng chập chờn) được coi như thành công.
+    startRecording: (roomId: string, clientCommandId: string) =>
+      okIfDuplicate(call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/start`, { client_command_id: clientCommandId })),
+    stopRecording: (roomId: string, clientCommandId: string) =>
+      okIfDuplicate(call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/stop`, { client_command_id: clientCommandId })),
+    switchCamera: (roomId: string, memberId: string, facing: T.CameraFacing, clientCommandId: string) =>
+      okIfDuplicate(
+        call<{ command_id: string }>(
+          'POST',
+          `/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(memberId)}/camera`,
+          { camera_facing: facing, client_command_id: clientCommandId },
+        ),
+      ),
   };
 }
 
 export type ApiClient = ReturnType<typeof createClient>;
+
+/** 1010 = lệnh đã được thực hiện trước đó → trả lại kết quả cũ, KHÔNG gửi lại lệnh. */
+async function okIfDuplicate<D>(p: Promise<D>): Promise<D> {
+  try {
+    return await p;
+  } catch (e) {
+    if (e instanceof ApiError && e.code === Codes.ACTION_DONE_PREVIOUSLY && e.data) return e.data as D;
+    throw e;
+  }
+}
+
+/** Ước lượng lệch đồng hồ client so với server từ các lần sync (giữ mẫu có độ trễ mạng thấp nhất). */
+export class ClockSync {
+  private best: { offset: number; rtt: number; at: number } | null = null;
+  /** sentAt / receivedAt là giờ local (ms) lúc gửi và nhận response chứa serverMs. */
+  sample(sentAt: number, receivedAt: number, serverMs: number) {
+    const rtt = receivedAt - sentAt;
+    const offset = serverMs - (sentAt + rtt / 2);
+    const stale = !this.best || receivedAt - this.best.at > 60_000;
+    if (stale || rtt <= this.best!.rtt * 1.2) this.best = { offset, rtt, at: receivedAt };
+  }
+  /** Lệch (ms): giờ server ≈ giờ local + offset */
+  get offset() {
+    return this.best?.offset ?? 0;
+  }
+  get rtt() {
+    return this.best?.rtt ?? null;
+  }
+  /** Đổi giờ server sang giờ local */
+  toLocal(serverMs: number) {
+    return serverMs - this.offset;
+  }
+  serverNow() {
+    return Date.now() + this.offset;
+  }
+}

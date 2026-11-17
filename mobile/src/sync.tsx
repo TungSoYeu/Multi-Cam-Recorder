@@ -2,7 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AppState } from 'react-native';
 import * as Battery from 'expo-battery';
 import { Paths } from 'expo-file-system';
-import { ApiError, type CameraFacing, type LeftReason, type SyncDeviceData } from '@multicam/shared';
+import {
+  ApiError,
+  ClockSync,
+  type CameraFacing,
+  type CommandAck,
+  type DeviceCommand,
+  type LeftReason,
+  type RecordingState,
+  type SyncDeviceData,
+} from '@multicam/shared';
 import { api } from './api';
 import { useNav } from './nav';
 
@@ -14,8 +23,30 @@ export const cameraState = {
   fps: 30,
 };
 
+/** Đồng hồ server ước lượng từ các lần sync — dùng để thực hiện lệnh đúng thời điểm hẹn. */
+export const clock = new ClockSync();
+
+export type CommandHandler = (cmd: DeviceCommand) => Promise<CommandAck['status']>;
+let commandHandler: CommandHandler | null = null;
+
+/** Màn quay đăng ký hàm thực thi lệnh (chỉ một màn tại một thời điểm). */
+export function useCommandHandler(handler: CommandHandler | null) {
+  const ref = useRef(handler);
+  ref.current = handler;
+  useEffect(() => {
+    if (!handler) return;
+    const fn: CommandHandler = (c) => ref.current!(c);
+    commandHandler = fn;
+    return () => {
+      if (commandHandler === fn) commandHandler = null;
+    };
+  }, [!!handler]);
+}
+
 export interface SyncInfo {
   room: SyncDeviceData['room'];
+  /** Phòng đang quay (null nếu không) */
+  recording: RecordingState | null;
   /** Lý do vừa rời phòng (bị kick / phòng đóng) — hiển thị một lần */
   exitReason: LeftReason | null;
   clearExitReason(): void;
@@ -46,22 +77,32 @@ function readFreeStorage(): number | undefined {
   }
 }
 
-/** Gọi sync_device định kỳ (mặc định 2 giây) khi app đang mở. */
+/** Gọi sync_device định kỳ (server quyết định chu kỳ: 1 giây khi ở trong phòng) khi app đang mở. */
 export function DeviceSyncProvider({ children }: { children: ReactNode }) {
   const nav = useNav();
   const deviceId = nav.session?.device?.device_id;
   const [room, setRoom] = useState<SyncDeviceData['room']>(null);
+  const [recording, setRecording] = useState<RecordingState | null>(null);
   const [exitReason, setExitReason] = useState<LeftReason | null>(null);
   const [connected, setConnected] = useState(true);
   const [ready, setReady] = useState(false);
   const roomRef = useRef<string | null>(null);
-  const intervalRef = useRef(2000);
+  const intervalRef = useRef(1000);
   const busy = useRef(false);
+  const again = useRef(false);
+  const seen = useRef(new Set<string>());
+  const acks = useRef<CommandAck[]>([]);
 
-  const tick = useCallback(async () => {
-    if (!deviceId || busy.current) return;
+  const tick = useCallback(async (): Promise<void> => {
+    if (!deviceId) return;
+    if (busy.current) {
+      again.current = true;
+      return;
+    }
     busy.current = true;
+    const sending = acks.current.splice(0);
     try {
+      const sentAt = Date.now();
       const d = await api.syncDevice(deviceId, {
         camera_facing: cameraState.facing,
         is_recording: cameraState.isRecording,
@@ -69,28 +110,49 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
         free_storage_bytes: readFreeStorage(),
         resolution: cameraState.resolution,
         fps: cameraState.fps,
+        ...(sending.length ? { acks: sending } : {}),
       });
-      intervalRef.current = d.interval_ms || 2000;
+      clock.sample(sentAt, Date.now(), d.server_time_ms);
+      intervalRef.current = d.interval_ms || 1000;
       const prev = roomRef.current;
       roomRef.current = d.room?.room_id ?? null;
       if (prev && !d.room && (d.last_left_reason === 'kicked' || d.last_left_reason === 'closed')) setExitReason(d.last_left_reason);
+      if (!d.room) seen.current.clear();
       setRoom(d.room);
+      setRecording(d.recording);
       setConnected(true);
       setReady(true);
+
+      for (const cmd of d.commands) {
+        if (seen.current.has(cmd.command_id) || !commandHandler) continue;
+        seen.current.add(cmd.command_id);
+        commandHandler(cmd)
+          .catch(() => 'failed' as const)
+          .then((status) => {
+            acks.current.push({ command_id: cmd.command_id, status });
+            tick(); // báo ACK ngay để Controller thấy
+          });
+      }
     } catch (e) {
+      acks.current.unshift(...sending); // gửi lại ACK ở lần sau
       if (e instanceof ApiError && e.code === 'NETWORK') setConnected(false);
       setReady(true);
     } finally {
       busy.current = false;
+      if (again.current) {
+        again.current = false;
+        tick();
+      }
     }
   }, [deviceId]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active = AppState.currentState === 'active';
+    let stopped = false;
     const loop = async () => {
       if (active) await tick();
-      timer = setTimeout(loop, intervalRef.current);
+      if (!stopped) timer = setTimeout(loop, intervalRef.current);
     };
     loop();
     const sub = AppState.addEventListener('change', (s) => {
@@ -98,6 +160,7 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       if (active) tick();
     });
     return () => {
+      stopped = true;
       clearTimeout(timer);
       sub.remove();
     };
@@ -105,6 +168,7 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
 
   const value: SyncInfo = {
     room,
+    recording,
     exitReason,
     clearExitReason: () => setExitReason(null),
     connected,

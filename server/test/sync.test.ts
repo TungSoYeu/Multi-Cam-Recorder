@@ -20,7 +20,7 @@ test('sync_device: lưu trạng thái, trả phòng hiện tại', async () => {
   assert.equal(res.data.room.room_id, room.room_id);
   assert.match(res.data.room.member_id, /^mb_/);
   assert.equal(res.data.last_left_reason, null);
-  assert.equal(res.data.interval_ms, 2000);
+  assert.equal(res.data.interval_ms, 1000);
   assert.deepEqual(res.data.commands, []);
   assert.equal(typeof res.data.server_time_ms, 'number');
 });

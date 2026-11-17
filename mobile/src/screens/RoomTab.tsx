@@ -30,6 +30,8 @@ export function RoomTab() {
     return (
       <Recorder
         roomId={room.room_id}
+        controlled
+        roomRecording={sync.recording}
         banner={
           <View>
             <View style={st.controlled}>

@@ -265,14 +265,8 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
     const auth = authenticate(ctx, req);
     const room = getRoom(ctx, req.params.room_id);
     assertOwner(auth, room);
-    if (room.status === 'open')
-      tx(db, () => {
-        const now = ctx.now();
-        db.prepare(`UPDATE rooms SET status = 'closed', closed_at = ? WHERE id = ?`).run(now, room.id);
-        db.prepare(
-          `UPDATE room_members SET left_at = ?, left_reason = 'closed' WHERE room_id = ? AND left_at IS NULL`,
-        ).run(now, room.id);
-      });
+    // Đóng phòng: đưa mọi máy ra và kết thúc phiên quay đang chạy
+    if (room.status === 'open') tx(db, () => closeOwnerRooms(ctx, auth.user.id));
     return ok(null);
   });
 }
