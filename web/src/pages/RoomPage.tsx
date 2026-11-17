@@ -51,7 +51,15 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onLoggedOut: () => void }) {
+export function RoomPage({
+  session,
+  onLoggedOut,
+  onOpenLibrary,
+}: {
+  session: StoredSession;
+  onLoggedOut: () => void;
+  onOpenLibrary: () => void;
+}) {
   const [room, setRoom] = useState<RoomData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [recording, setRecording] = useState<RecordingState | null>(null);
@@ -388,7 +396,7 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
           <span className="muted small">{isRecording ? 'STOP' : 'REC'}</span>
         </div>
         <div className="bar-actions">
-          <button className="secondary" disabled title="Thư viện video">
+          <button className="secondary" onClick={onOpenLibrary} title="Video đã upload trên server">
             <FolderIcon /> Thư viện
           </button>
           <button className="danger" onClick={closeRoom} disabled={!room || closed}>

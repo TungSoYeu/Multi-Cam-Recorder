@@ -4,11 +4,13 @@ import type { StoredSession } from '@multicam/shared';
 import { api, onSessionExpired } from './api.ts';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { RoomPage } from './pages/RoomPage.tsx';
+import { LibraryPage } from './pages/LibraryPage.tsx';
 import './styles.css';
 
 function App() {
   const [session, setSession] = useState<StoredSession | null | undefined>(undefined);
   const [notice, setNotice] = useState<string | null>(null);
+  const [view, setView] = useState<'room' | 'library'>('room');
 
   useEffect(() => {
     api.getSession().then((s) => setSession(s?.account_role === 'controller' ? s : null));
@@ -29,7 +31,8 @@ function App() {
         }}
       />
     );
-  return <RoomPage session={session} onLoggedOut={() => setSession(null)} />;
+  if (view === 'library') return <LibraryPage onBack={() => setView('room')} />;
+  return <RoomPage session={session} onLoggedOut={() => setSession(null)} onOpenLibrary={() => setView('library')} />;
 }
 
 createRoot(document.getElementById('root')!).render(

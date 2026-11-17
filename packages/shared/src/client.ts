@@ -207,6 +207,26 @@ export function createClient(opts: ClientOptions) {
         headers: { 'X-Chunk-Sha256': sha256Hex },
       } satisfies BinaryBody),
     getUploadStatus: (uploadId: string) => call<T.UploadStatus>('GET', `/videos/uploads/${encodeURIComponent(uploadId)}`),
+    // E — Thư viện video trên server
+    /** get_list_videos. Hết dữ liệu (kể cả trang đầu rỗng) → trả danh sách rỗng thay vì lỗi 9994. */
+    async listVideos(q: T.VideoListQuery = {}): Promise<T.VideoList> {
+      const qs = Object.entries(q)
+        .filter(([, v]) => v !== undefined && v !== '')
+        .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+        .join('&');
+      try {
+        return await call<T.VideoList>('GET', `/videos${qs ? `?${qs}` : ''}`);
+      } catch (e) {
+        if (e instanceof ApiError && e.code === Codes.NO_DATA)
+          return { videos: [], total: (e.data as { total?: number } | null)?.total ?? 0, index: q.index ?? 0, count: 0, has_more: '0' };
+        throw e;
+      }
+    },
+    getVideo: (videoId: string) => call<T.VideoDetail>('GET', `/videos/${encodeURIComponent(videoId)}`),
+    getDownloadUrl: (videoId: string) => call<T.DownloadLink>('GET', `/videos/${encodeURIComponent(videoId)}/download`),
+    deleteVideo: (videoId: string) => call<{ video_id: string }>('DELETE', `/videos/${encodeURIComponent(videoId)}`),
+    deleteVideosBulk: (videoIds: string[]) => call<{ deleted: string[]; not_found: string[] }>('POST', '/videos/bulk-delete', { video_ids: videoIds }),
+
     completeUpload: (uploadId: string, thumbnailBase64?: string) =>
       call<T.VideoInfo>('POST', `/videos/uploads/${encodeURIComponent(uploadId)}/complete`, thumbnailBase64 ? { thumbnail_base64: thumbnailBase64 } : {}),
 
