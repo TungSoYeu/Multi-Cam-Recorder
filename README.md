@@ -16,7 +16,9 @@ Một máy **Controller** (web trên laptop) điều khiển nhiều máy **Remo
   Ngoài ra đã có: quên mật khẩu, đổi mật khẩu, đăng xuất, xóa tài khoản, danh sách máy, kick, rời phòng, đóng phòng (đủ nhóm A và B: 15/28 API).
 - ✅ **Tuần 2**: Remote quay video MP4 (1080p, H.264), đổi camera trước/sau, thư viện clip trong app (xem, chọn nhiều để xóa), chế độ quay độc lập.
   `sync_device` / `sync_room` gửi 2 giây một lần: Controller thấy danh sách máy kèm pin, dung lượng trống, camera, độ phân giải, ON AIR/ONLINE/OFFLINE.
-- ⏳ Tuần 3–5: Start/Stop đồng bộ từ Controller, upload tự động, thư viện video trên server. Bảng CSDL cho các tuần này đã có sẵn trong `server/src/db/schema.sql`.
+- ✅ **Tuần 3**: Controller bấm REC/STOP → mọi máy cùng bắt đầu/dừng theo giờ hẹn (bù lệch đồng hồ từng máy), ACK từng máy, chống lệnh trùng (1010),
+  máy lỡ lệnh tự khớp theo trạng thái phòng, Controller đổi camera trước/sau từ xa. Cơ chế chi tiết: [docs/API.md](docs/API.md#cơ-chế-startstop-đồng-bộ).
+- ⏳ Tuần 4–5: upload tự động, thư viện video trên server.
 
 ## Chạy lần đầu (Windows, PowerShell)
 
@@ -64,7 +66,7 @@ Mỗi lần chạy lại cloudflared, URL sẽ đổi. Muốn URL cố định t
 ## Kiểm tra
 
 ```powershell
-npm test          # 24 test: auth, phòng, sync, chuẩn hóa MP4
+npm test          # 33 test: auth, phòng, sync, Start/Stop, đồng hồ, chuẩn hóa MP4
 npm run typecheck # shared, server, web, mobile
 ```
 
@@ -86,6 +88,14 @@ npm run typecheck # shared, server, web, mobile
 - **Expo Go, không cần Mac**: chỉ dùng module có sẵn trong Expo Go (camera, file-system, battery, video, video-thumbnails, keep-awake).
   iPhone ghi QuickTime nên app ép H.264 và đổi header `ftyp` sang MP4 ngay trên máy (không nén lại). Chi tiết ở [docs/API.md](docs/API.md#video-mp4-trên-thiết-bị-tuần-2).
 - **Tab Phòng luôn được giữ trong bộ nhớ** để camera sẵn sàng nhận lệnh, và chuyển tab không làm ngắt clip đang quay.
+
+## Kiểm thử tuần 3 (cần 2 điện thoại)
+
+1. Hai máy cùng vào phòng; nút quay trên máy bị khóa, hiện "Chờ lệnh quay từ Controller".
+2. Web bấm **REC** → web đếm "Bắt đầu quay sau 2 giây…", hai máy cùng hiện đồng hồ đỏ; ô camera chuyển **ON AIR**, "Start: đã thực hiện".
+3. Quay một vật chuyển động hoặc đồng hồ bấm giờ, bấm **STOP** → mở 2 clip để so độ lệch đầu clip.
+4. Tắt Wi-Fi/4G một máy trong lúc bấm REC, bật lại → máy đó tự bắt đầu quay (tự khớp).
+5. Bấm 🔄 trên ô camera (khi không quay) → máy đổi camera trước/sau.
 
 ## Kiểm thử tuần 2 trên điện thoại
 

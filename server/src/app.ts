@@ -7,6 +7,7 @@ import type { Ctx } from './context.ts';
 import { ApiError, Codes, envelope, fail } from './lib/errors.ts';
 import { authRoutes } from './modules/auth.ts';
 import { roomRoutes } from './modules/rooms.ts';
+import { recordingRoutes } from './modules/recording.ts';
 import { syncRoutes } from './modules/sync.ts';
 
 export const API_PREFIX = '/api';
@@ -69,6 +70,7 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promi
       authRoutes(api, ctx);
       roomRoutes(api, ctx);
       syncRoutes(api, ctx);
+      recordingRoutes(api, ctx);
     },
     { prefix: API_PREFIX },
   );

@@ -1,24 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { ApiError, type RoomData, type RoomMember, type StoredSession } from '@multicam/shared';
+import { ApiError, ClockSync, type RecordingState, type RoomData, type StoredSession, type SyncRoomData } from '@multicam/shared';
 import { api } from '../api.ts';
 import { CameraIcon, CloseIcon, CopyIcon, DoorIcon, FolderIcon, GearIcon, QrIcon } from '../components/Icons.tsx';
 import { SettingsModal } from '../components/SettingsModal.tsx';
 
-const POLL_MS = 2000;
-const DEVICE_LABEL: Record<number, string> = { 1: 'Android', 2: 'iOS', 4: 'Web' };
+type Member = SyncRoomData['members'][number];
 
-function useCountdown(target: string | undefined) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  if (!target) return 0;
-  return Math.max(0, Math.floor((Date.parse(target) - now) / 1000));
-}
+const DEVICE_LABEL: Record<number, string> = { 1: 'Android', 2: 'iOS', 4: 'Web' };
+const CMD_LABEL = { start_recording: 'Start', stop_recording: 'Stop', switch_camera: 'Đổi camera' } as const;
 
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 1)} GB`;
+const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const hhmmss = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${mmss(s % 3600)}`;
+};
+const uuid = () => crypto.randomUUID();
+const errMsg = (e: unknown) => (e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
+
+function useNow(ms = 250) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
+}
 
 function Battery({ level }: { level: number | null }) {
   if (level === null || level < 0) return null;
@@ -33,11 +41,21 @@ function Battery({ level }: { level: number | null }) {
   );
 }
 
-const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+/** Gọi lại đúng một lần khi lỗi mạng, với CÙNG client_command_id (server trả 1010 nếu lệnh đã nhận). */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'NETWORK') return fn();
+    throw e;
+  }
+}
 
 export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onLoggedOut: () => void }) {
   const [room, setRoom] = useState<RoomData | null>(null);
-  const [members, setMembers] = useState<RoomMember[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [recording, setRecording] = useState<RecordingState | null>(null);
+  const [lastDuration, setLastDuration] = useState(0);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qr, setQr] = useState('');
@@ -45,8 +63,11 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
   const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  const roomRef = useRef<RoomData | null>(null);
-  const remaining = useCountdown(room?.expires_at);
+  const [sending, setSending] = useState(false);
+  const clock = useRef(new ClockSync());
+  /** Bỏ qua kết quả poll cũ trả về sau khi vừa gửi lệnh (tránh nút REC nhấp nháy) */
+  const holdUntil = useRef(0);
+  const now = useNow();
 
   // create_room: "Mở màn hình" → server trả phòng đang mở hoặc tạo phòng mới
   const openRoom = useCallback(async () => {
@@ -54,12 +75,11 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
     setError(null);
     try {
       const r = await api.createRoom();
-      roomRef.current = r;
       setRoom(r);
-      setMembers(r.members);
+      setMembers(r.members.map((m) => ({ ...m, last_command: null })));
       setClosed(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }
@@ -77,48 +97,101 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
       .catch(() => setQr(''));
   }, [room?.invite_code]);
 
-  // Polling danh sách máy
+  // sync_room: 1 giây/lần — danh sách máy, trạng thái, phiên quay
   useEffect(() => {
     if (!room || closed) return;
     let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       try {
+        const sentAt = Date.now();
         const d = await api.syncRoom(room.room_id);
-        if (!stop) {
-          setMembers(d.members);
-          setError(null);
-        }
+        if (stop) return;
+        clock.current.sample(sentAt, Date.now(), d.server_time_ms);
+        setMembers(d.members);
+        if (Date.now() > holdUntil.current) setRecording(d.recording);
+        if (d.invite_code !== room.invite_code) setRoom((r) => (r ? { ...r, invite_code: d.invite_code, expires_at: d.expires_at } : r));
+        setError(null);
       } catch (e) {
         if (stop) return;
         if (e instanceof ApiError && e.code === '2005') setClosed(true);
         else if (e instanceof ApiError && e.code === 'NETWORK') setError('Mất kết nối tới server, đang thử lại…');
       }
+      if (!stop) timer = setTimeout(tick, 1000);
     };
-    const t = setInterval(tick, POLL_MS);
+    tick();
     return () => {
       stop = true;
-      clearInterval(t);
+      clearTimeout(timer);
     };
   }, [room?.room_id, closed]);
 
-  async function kick(m: RoomMember) {
+  const serverNow = now + clock.current.offset;
+  const isRecording = !!recording && !recording.stop_at_ms;
+  const startsIn = recording ? recording.started_at_ms - serverNow : 0;
+
+  async function toggleRecording() {
+    if (!room || sending) return;
+    setSending(true);
+    const id = uuid();
+    try {
+      if (!isRecording) {
+        const r = await withRetry(() => api.startRecording(room.room_id, id));
+        holdUntil.current = Date.now() + 1500;
+        setRecording({
+          recording_session_id: r.recording_session_id,
+          status: 'recording',
+          started_at: r.execute_at,
+          started_at_ms: r.execute_at_ms,
+          stop_at: null,
+          stop_at_ms: null,
+        });
+      } else {
+        const r = await withRetry(() => api.stopRecording(room.room_id, id));
+        holdUntil.current = Date.now() + 1500;
+        setRecording((cur) => (cur ? { ...cur, status: 'stopped', stop_at: r.execute_at, stop_at_ms: r.execute_at_ms } : cur));
+        setLastDuration(r.duration_ms ?? 0);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === '9994') alert('Phòng chưa có máy Remote nào.');
+      else if (e instanceof ApiError && e.code === '2006') holdUntil.current = 0; // lệch trạng thái → lấy lại ở lần sync tới
+      else alert(errMsg(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function switchCamera(m: Member) {
+    if (!room) return;
+    const next = m.state?.camera_facing === 'front' ? 'back' : 'front';
+    try {
+      await withRetry(() => api.switchCamera(room.room_id, m.member_id, next, uuid()));
+    } catch (e) {
+      alert(e instanceof ApiError && e.code === '2006' ? 'Không đổi được camera khi đang quay.' : errMsg(e));
+    }
+  }
+
+  async function kick(m: Member) {
     if (!room || !confirm(`Loại "${m.camera_name}" ra khỏi phòng?`)) return;
     try {
       await api.kickMember(room.room_id, m.member_id);
       setMembers((list) => list.filter((x) => x.member_id !== m.member_id));
     } catch (e) {
-      alert(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
+      alert(errMsg(e));
     }
   }
 
   async function closeRoom() {
-    if (!room || !confirm('Đóng phòng? Tất cả máy Remote sẽ bị đưa ra khỏi phòng.')) return;
+    if (!room) return;
+    const warn = isRecording ? 'Phòng đang quay! ' : '';
+    if (!confirm(`${warn}Đóng phòng? Tất cả máy Remote sẽ bị đưa ra khỏi phòng.`)) return;
     try {
       await api.closeRoom(room.room_id);
       setClosed(true);
       setMembers([]);
+      setRecording(null);
     } catch (e) {
-      alert(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
+      alert(errMsg(e));
     }
   }
 
@@ -136,7 +209,19 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
   const online = members.filter((m) => m.is_online === '1').length;
   const slots = Math.max(4, members.length + (members.length < (room?.max_members ?? 8) ? 1 : 0));
   const initials = `${session.user.first_name[0] ?? ''}${session.user.last_name[0] ?? ''}`.toUpperCase() || 'C';
+  const remaining = room ? Math.max(0, Math.floor((Date.parse(room.expires_at) - now) / 1000)) : 0;
   const expired = remaining === 0;
+
+  let timerText = hhmmss(lastDuration);
+  let timerNote = `${online}/${members.length} thiết bị kết nối`;
+  if (recording && startsIn > 0) {
+    timerText = hhmmss(0);
+    timerNote = `Bắt đầu quay sau ${Math.ceil(startsIn / 1000)} giây…`;
+  } else if (recording) {
+    const endMs = recording.stop_at_ms ? Math.min(serverNow, recording.stop_at_ms) : serverNow;
+    timerText = hhmmss(endMs - recording.started_at_ms);
+    if (recording.stop_at_ms) timerNote = 'Đang dừng…';
+  }
 
   return (
     <div className="app">
@@ -185,14 +270,15 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
         ) : (
           <div className={`grid count-${Math.min(slots, 9)}`}>
             {members.map((m, i) => {
-              const online = m.is_online === '1';
+              const on = m.is_online === '1';
               const s = m.state;
-              const rec = online && s?.is_recording === '1';
+              const rec = on && s?.is_recording === '1';
+              const cmd = m.last_command;
               return (
-                <article key={m.member_id} className={`tile ${rec ? 'recording' : online ? 'online' : 'offline'}`}>
+                <article key={m.member_id} className={`tile ${rec ? 'recording' : on ? 'online' : 'offline'}`}>
                   <div className="tile-head">
                     <span className="pill">
-                      <span className={`dot ${rec ? 'rec' : online ? 'ok' : ''}`} />
+                      <span className={`dot ${rec ? 'rec' : on ? 'ok' : ''}`} />
                       Cam {String(i + 1).padStart(2, '0')} · {m.camera_name}
                     </span>
                     <span className="stats">
@@ -206,15 +292,30 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
                   <div className="tile-body">
                     <CameraIcon size={34} />
                     <span>
-                      {!online ? 'Mất kết nối' : rec ? 'Đang quay' : 'Sẵn sàng nhận lệnh'}
-                      {online && s ? ` · ${s.camera_facing === 'front' ? 'Camera trước' : 'Camera sau'}` : ''}
+                      {!on ? 'Mất kết nối' : rec ? 'Đang quay' : 'Sẵn sàng nhận lệnh'}
+                      {on && s ? ` · ${s.camera_facing === 'front' ? 'Camera trước' : 'Camera sau'}` : ''}
                     </span>
+                    {cmd ? (
+                      <span className={`cmd ${cmd.status}`} title="Trạng thái lệnh gần nhất">
+                        {CMD_LABEL[cmd.type]}: {cmd.status === 'done' ? 'đã thực hiện' : cmd.status === 'failed' ? 'thất bại' : 'chờ máy nhận…'}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="tile-foot">
                     <span className="mono">
                       {s?.resolution ? `${s.resolution} · ${s.fps ?? 30}fps` : `${m.device_name} · ${DEVICE_LABEL[m.device_type] ?? ''}`}
                     </span>
-                    <span className={`badge ${rec ? 'rec' : online ? 'ok' : 'off'}`}>{rec ? 'ON AIR' : online ? 'ONLINE' : 'OFFLINE'}</span>
+                    <span className="foot-actions">
+                      <button
+                        className="icon-btn small"
+                        title={recording ? 'Không đổi được camera khi đang quay' : 'Đổi camera trước/sau'}
+                        disabled={!!recording || !on}
+                        onClick={() => switchCamera(m)}
+                      >
+                        🔄
+                      </button>
+                      <span className={`badge ${rec ? 'rec' : on ? 'ok' : 'off'}`}>{rec ? 'ON AIR' : on ? 'ONLINE' : 'OFFLINE'}</span>
+                    </span>
                   </div>
                 </article>
               );
@@ -259,16 +360,20 @@ export function RoomPage({ session, onLoggedOut }: { session: StoredSession; onL
 
       <footer className="control-bar">
         <div className="timer">
-          <span className="mono big">00:00:00</span>
-          <span className="muted">
-            {online}/{members.length} thiết bị kết nối
-          </span>
+          <span className={`mono big ${isRecording && startsIn <= 0 ? 'live' : ''}`}>{timerText}</span>
+          <span className="muted">{timerNote}</span>
         </div>
         <div className="rec">
-          <button className="rec-btn" disabled title="Điều khiển quay Start/Stop — Tuần 3">
+          <button
+            className={`rec-btn ${isRecording ? 'on' : ''}`}
+            onClick={toggleRecording}
+            disabled={!room || closed || sending || members.length === 0 || (!!recording && !!recording.stop_at_ms)}
+            title={members.length === 0 ? 'Phòng chưa có máy nào' : isRecording ? 'Dừng quay tất cả máy' : 'Bắt đầu quay tất cả máy'}
+            aria-label={isRecording ? 'Dừng quay' : 'Bắt đầu quay'}
+          >
             <span />
           </button>
-          <span className="muted small">REC</span>
+          <span className="muted small">{isRecording ? 'STOP' : 'REC'}</span>
         </div>
         <div className="bar-actions">
           <button className="secondary" disabled title="Thư viện video — Tuần 5">
