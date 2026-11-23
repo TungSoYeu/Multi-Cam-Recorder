@@ -28,7 +28,10 @@ function rateLimiter(limit: number, windowMs: number) {
   };
 }
 
-export async function buildApp(ctx: Ctx, opts: { logger?: boolean | { level: string } } = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  ctx: Ctx,
+  opts: { logger?: boolean | { level: string } } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: opts.logger ?? false,
     bodyLimit: 1024 * 1024,
@@ -54,7 +57,8 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean | { level: str
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) return reply.code(200).send(envelope(err.code, err.message, err.data));
     const e = err as { code?: string; statusCode?: number; message: string };
-    if (e.code === 'FST_ERR_CTP_BODY_TOO_LARGE') return reply.code(413).send(envelope(Codes.PARAM_VALUE_INVALID, 'Body too large'));
+    if (e.code === 'FST_ERR_CTP_BODY_TOO_LARGE')
+      return reply.code(413).send(envelope(Codes.PARAM_VALUE_INVALID, 'Body too large'));
     if (e.code?.startsWith('FST_ERR_CTP') || e.statusCode === 400 || e.statusCode === 415)
       return reply.code(200).send(envelope(Codes.PARAM_TYPE_INVALID, e.message));
     if (e.code?.startsWith('ERR_SQLITE') || /database is locked/i.test(e.message)) {
@@ -73,7 +77,9 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean | { level: str
         if (req.method === 'POST' && req.url.startsWith(`${API_PREFIX}/auth/`) && !req.url.endsWith('/refresh'))
           authLimit(`${req.ip}:${req.url}`, ctx.now());
       });
-      api.get('/health', async () => envelope(Codes.OK, undefined, { status: 'ok', time: new Date(ctx.now()).toISOString() }));
+      api.get('/health', async () =>
+        envelope(Codes.OK, undefined, { status: 'ok', time: new Date(ctx.now()).toISOString() }),
+      );
       authRoutes(api, ctx);
       roomRoutes(api, ctx);
       syncRoutes(api, ctx);

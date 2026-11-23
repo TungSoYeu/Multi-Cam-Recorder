@@ -3,7 +3,15 @@ import { ApiError, isEmail, type StoredSession } from '@multicam/shared';
 import { api, browserName, clientDeviceId } from '../api.ts';
 import { CameraIcon } from '../components/Icons.tsx';
 
-export function LoginPage({ notice, onLoggedIn, onForgot }: { notice: string | null; onLoggedIn: (s: StoredSession) => void; onForgot: () => void }) {
+export function LoginPage({
+  notice,
+  onLoggedIn,
+  onForgot,
+}: {
+  notice: string | null;
+  onLoggedIn: (s: StoredSession) => void;
+  onForgot: () => void;
+}) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -27,14 +35,23 @@ export function LoginPage({ notice, onLoggedIn, onForgot }: { notice: string | n
       });
       if (d.account_role !== 'controller') {
         await api.logout().catch(() => api.clearSession());
-        setError({ text: 'Giao diện web dành cho tài khoản Controller. Tài khoản Remote hãy dùng app trên điện thoại.' });
+        setError({
+          text: 'Giao diện web dành cho tài khoản Controller. Tài khoản Remote hãy dùng app trên điện thoại.',
+        });
         return;
       }
       const s = await api.getSession();
       if (s) onLoggedIn(s);
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === '9995') setError({ field: 'id', text: (err.data as { reason?: string } | null)?.reason === 'locked' ? 'Tài khoản đã bị khóa' : 'Tài khoản không tồn tại' });
+        if (err.code === '9995')
+          setError({
+            field: 'id',
+            text:
+              (err.data as { reason?: string } | null)?.reason === 'locked'
+                ? 'Tài khoản đã bị khóa'
+                : 'Tài khoản không tồn tại',
+          });
         else if (err.code === '1004' && (err.data as { field?: string } | null)?.field === 'password')
           setError({ field: 'password', text: 'Sai mật khẩu' });
         else setError({ text: err.uiMessage });

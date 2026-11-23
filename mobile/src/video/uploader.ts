@@ -219,7 +219,8 @@ async function handleError(id: string, e: unknown, attempt: number): Promise<voi
   if (isCode(e, '3001', '3002', '3003') && attempt < 2) {
     // 3002: hỏi lại server mảnh nào thiếu (cùng phiên); 3001 / 3003 toàn file: mở phiên mới
     if (!isCode(e, '3002')) await updateClip(id, { upload_id: null, streaming: false });
-    if (isCode(e, '3003') && (e.data as { scope?: string } | null)?.scope === 'file') await updateClip(id, { checksum_sha256: undefined });
+    if (isCode(e, '3003') && (e.data as { scope?: string } | null)?.scope === 'file')
+      await updateClip(id, { checksum_sha256: undefined });
     return uploadOne(id, attempt + 1);
   }
   if (isCode(e, '1006')) {
@@ -228,9 +229,16 @@ async function handleError(id: string, e: unknown, attempt: number): Promise<voi
     return emit();
   }
   if (isCode(e, '3004', '9998')) {
-    blocked = e.code === '3004' ? 'Đã hết dung lượng lưu trữ. Hãy nhờ Controller xóa bớt clip cũ.' : 'Cần đăng nhập lại để tiếp tục tải lên';
+    blocked =
+      e.code === '3004'
+        ? 'Đã hết dung lượng lưu trữ. Hãy nhờ Controller xóa bớt clip cũ.'
+        : 'Cần đăng nhập lại để tiếp tục tải lên';
     return setUi(id, { status: 'paused', progress: 0, message: blocked });
   }
   paused.add(id);
-  setUi(id, { status: 'paused', progress: ui.get(id)?.progress ?? 0, message: e instanceof ApiError ? e.uiMessage : 'Tải lên bị gián đoạn' });
+  setUi(id, {
+    status: 'paused',
+    progress: ui.get(id)?.progress ?? 0,
+    message: e instanceof ApiError ? e.uiMessage : 'Tải lên bị gián đoạn',
+  });
 }

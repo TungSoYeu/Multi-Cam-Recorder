@@ -28,28 +28,33 @@ export function HomeScreen() {
 
   return (
     <DeviceSyncProvider>
-    <SafeAreaView style={st.screen} edges={['top', 'left', 'right']}>
-      <View style={{ flex: 1 }}>
-        {/* Tab Phòng luôn được giữ lại để camera sẵn sàng nhận lệnh và không ngắt clip đang quay */}
-        <View style={[{ flex: 1 }, tab !== 'room' && { display: 'none' }]}>
-          <RoomTab />
+      <SafeAreaView style={st.screen} edges={['top', 'left', 'right']}>
+        <View style={{ flex: 1 }}>
+          {/* Tab Phòng luôn được giữ lại để camera sẵn sàng nhận lệnh và không ngắt clip đang quay */}
+          <View style={[{ flex: 1 }, tab !== 'room' && { display: 'none' }]}>
+            <RoomTab />
+          </View>
+          {tab === 'library' && <LibraryTab />}
+          {tab === 'settings' && <SettingsTab />}
         </View>
-        {tab === 'library' && <LibraryTab />}
-        {tab === 'settings' && <SettingsTab />}
-      </View>
-      <SafeAreaView edges={['bottom']} style={st.tabbar}>
-        {TABS.map((t) => (
-          <Pressable key={t.key} style={st.tab} onPress={() => setTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: tab === t.key }}>
-            <Text style={{ fontSize: 20, opacity: tab === t.key ? 1 : 0.5 }}>{t.icon}</Text>
-            <Text style={[st.tabLabel, tab === t.key && { color: colors.accent }]}>{t.label}</Text>
-          </Pressable>
-        ))}
+        <SafeAreaView edges={['bottom']} style={st.tabbar}>
+          {TABS.map((t) => (
+            <Pressable
+              key={t.key}
+              style={st.tab}
+              onPress={() => setTab(t.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === t.key }}
+            >
+              <Text style={{ fontSize: 20, opacity: tab === t.key ? 1 : 0.5 }}>{t.icon}</Text>
+              <Text style={[st.tabLabel, tab === t.key && { color: colors.accent }]}>{t.label}</Text>
+            </Pressable>
+          ))}
+        </SafeAreaView>
       </SafeAreaView>
-    </SafeAreaView>
     </DeviceSyncProvider>
   );
 }
-
 
 function SettingsTab() {
   const nav = useNav();
@@ -114,7 +119,11 @@ function SettingsTab() {
       <View>
         <Text style={st.section}>THIẾT BỊ</Text>
         <View style={st.group}>
-          <Row label="Tên camera (áp dụng ở lần vào phòng tới)" value={name === null ? cameraName : ''} onPress={() => setName(name === null ? cameraName : null)} />
+          <Row
+            label="Tên camera (áp dụng ở lần vào phòng tới)"
+            value={name === null ? cameraName : ''}
+            onPress={() => setName(name === null ? cameraName : null)}
+          />
           {name !== null ? (
             <View style={{ padding: 12, backgroundColor: colors.surface }}>
               <Field value={name} onChangeText={setName} maxLength={30} autoFocus autoCapitalize="words" />
@@ -129,9 +138,16 @@ function SettingsTab() {
             </View>
           ) : null}
           <Row label="Độ phân giải" value={qualityLabel(p.quality)} onPress={nextQuality} />
-          <Row label="Dung lượng còn trống" value={`${formatBytes(Paths.availableDiskSpace)} / ${formatBytes(Paths.totalDiskSpace)}`} />
+          <Row
+            label="Dung lượng còn trống"
+            value={`${formatBytes(Paths.availableDiskSpace)} / ${formatBytes(Paths.totalDiskSpace)}`}
+          />
           <Row label="Thiết bị" value={s?.device?.device_name} />
-          <Row label="Máy chủ" value={server.replace(/^https?:\/\//, '')} onPress={() => nav.push({ name: 'server' })} />
+          <Row
+            label="Máy chủ"
+            value={server.replace(/^https?:\/\//, '')}
+            onPress={() => nav.push({ name: 'server' })}
+          />
         </View>
       </View>
       <View>
@@ -154,7 +170,9 @@ function ControllerNotice() {
     <SafeAreaView style={[st.screen, st.centerPad]}>
       <Text style={{ fontSize: 40 }}>🖥️</Text>
       <Text style={st.h1}>Tài khoản Controller</Text>
-      <Text style={st.muted}>Controller điều khiển phòng trên giao diện web. Mở địa chỉ máy chủ bằng trình duyệt trên laptop.</Text>
+      <Text style={st.muted}>
+        Controller điều khiển phòng trên giao diện web. Mở địa chỉ máy chủ bằng trình duyệt trên laptop.
+      </Text>
       <Button
         title="Đăng xuất"
         variant="secondary"
@@ -174,11 +192,30 @@ const st = StyleSheet.create({
   centerPad: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
   h1: { color: colors.text, fontSize: 24, fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  tabbar: { flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  tabbar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   tab: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 6, gap: 2 },
   tabLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface, borderRadius: 14, padding: 14 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#2a2118', alignItems: 'center', justifyContent: 'center' },
+  profile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 14,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2a2118',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   name: { color: colors.text, fontSize: 17, fontWeight: '600' },
   badge: { color: colors.muted, fontSize: 12, marginTop: 2 },
   section: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 8 },

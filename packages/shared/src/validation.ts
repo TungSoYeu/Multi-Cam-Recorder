@@ -1,4 +1,4 @@
-/** Quy tắc nhập liệu dùng chung cho client và server (theo đề bài signup). */
+/** Quy tắc nhập liệu dùng chung cho client và server. */
 export const PHONE_RE = /^0\d{9}$/;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** 6–20 ký tự, chỉ chữ và số (không ký tự đặc biệt). */

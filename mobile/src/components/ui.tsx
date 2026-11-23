@@ -15,7 +15,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
 
-export function Screen({ children, scroll = true, padded = true }: { children: ReactNode; scroll?: boolean; padded?: boolean }) {
+export function Screen({
+  children,
+  scroll = true,
+  padded = true,
+}: {
+  children: ReactNode;
+  scroll?: boolean;
+  padded?: boolean;
+}) {
   const body = <View style={[padded && styles.padded, { flexGrow: 1 }]}>{children}</View>;
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
@@ -70,7 +78,12 @@ export function Field({ label, error, secure, style, ...rest }: FieldProps) {
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry={secure && hidden}
-          style={[styles.input, error ? { borderColor: colors.danger } : null, secure ? { paddingRight: 56 } : null, style]}
+          style={[
+            styles.input,
+            error ? { borderColor: colors.danger } : null,
+            secure ? { paddingRight: 56 } : null,
+            style,
+          ]}
           {...rest}
         />
         {secure ? (
@@ -105,12 +118,24 @@ export function Button({
       onPress={onPress}
       disabled={off}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.btn, styles[`btn_${variant}`], off && { opacity: 0.45 }, pressed && { opacity: 0.8 }, style]}
+      style={({ pressed }) => [
+        styles.btn,
+        styles[`btn_${variant}`],
+        off && { opacity: 0.45 },
+        pressed && { opacity: 0.8 },
+        style,
+      ]}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.accentInk : colors.text} />
       ) : (
-        <Text style={[styles.btnText, variant === 'primary' && { color: colors.accentInk }, variant === 'danger' && { color: colors.danger }]}>
+        <Text
+          style={[
+            styles.btnText,
+            variant === 'primary' && { color: colors.accentInk },
+            variant === 'danger' && { color: colors.danger },
+          ]}
+        >
           {title}
         </Text>
       )}
@@ -185,7 +210,17 @@ export function CodeInput({
   );
 }
 
-export function Row({ label, value, onPress, danger }: { label: string; value?: string; onPress?: () => void; danger?: boolean }) {
+export function Row({
+  label,
+  value,
+  onPress,
+  danger,
+}: {
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  danger?: boolean;
+}) {
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}>
       <Text style={[styles.rowLabel, danger && { color: colors.danger }]}>{label}</Text>

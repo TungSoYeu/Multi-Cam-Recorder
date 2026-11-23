@@ -130,8 +130,7 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
     const room = tx(db, () => {
       const now = ctx.now();
       const open = db.prepare(`SELECT * FROM rooms WHERE owner_id = ? AND status = 'open'`).get(auth.user.id) as
-        | RoomRow
-        | undefined;
+        RoomRow | undefined;
       if (open) {
         if (open.invite_expires_at <= now) {
           // Mã cũ hết hạn: cấp mã mới, giữ nguyên phòng và thành viên.
@@ -231,10 +230,11 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
             )
             .get(room.id, auth.device.id) as { left_at: number | null; left_reason: string | null } | undefined)
         : undefined;
-      if (!m || m.left_at) fail(Codes.NOT_ACCESS, 'Device is not in this room', { reason: m?.left_reason ?? 'not_member' });
+      if (!m || m.left_at)
+        fail(Codes.NOT_ACCESS, 'Device is not in this room', { reason: m?.left_reason ?? 'not_member' });
     }
     const list = members(ctx, room.id);
-    if (!list.length) fail(Codes.NO_DATA, 'Room has no device'); // đề bài 9994: phòng chưa có máy nào
+    if (!list.length) fail(Codes.NO_DATA, 'Room has no device'); // 9994: phòng chưa có máy nào
     return ok({ room_id: room.id, room_name: room.name, status: room.status, total: list.length, members: list });
   });
 
@@ -245,7 +245,9 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
     assertOwner(auth, room);
     if (room.status === 'closed') fail(Codes.ROOM_CLOSED);
     const r = db
-      .prepare(`UPDATE room_members SET left_at = ?, left_reason = 'kicked' WHERE id = ? AND room_id = ? AND left_at IS NULL`)
+      .prepare(
+        `UPDATE room_members SET left_at = ?, left_reason = 'kicked' WHERE id = ? AND room_id = ? AND left_at IS NULL`,
+      )
       .run(ctx.now(), req.params.member_id, room.id);
     if (r.changes === 0) fail(Codes.PARAM_VALUE_INVALID, 'Member not found', { field: 'member_id' });
     return ok(null);

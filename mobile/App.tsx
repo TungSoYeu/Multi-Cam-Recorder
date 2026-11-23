@@ -86,7 +86,10 @@ export default function App() {
         {stack ? (
           // Giữ mọi màn trong ngăn xếp (chỉ ẩn): mở màn con trong Cài đặt không làm ngắt clip đang quay hay vòng sync
           stack.map((r, i) => (
-            <View key={`${gen}-${i}-${r.name}`} style={[{ flex: 1, backgroundColor: colors.bg }, i < stack.length - 1 && { display: 'none' }]}>
+            <View
+              key={`${gen}-${i}-${r.name}`}
+              style={[{ flex: 1, backgroundColor: colors.bg }, i < stack.length - 1 && { display: 'none' }]}
+            >
               {render(r)}
             </View>
           ))

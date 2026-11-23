@@ -30,7 +30,9 @@ export function ForgotPage({ onDone, onBack }: { onDone: (notice: string) => voi
     setBusy(true);
     setError(null);
     try {
-      const d = await api.getVerifyCode({ ...toIdent(id), purpose: 'forgot_password' } as Parameters<typeof api.getVerifyCode>[0]);
+      const d = await api.getVerifyCode({ ...toIdent(id), purpose: 'forgot_password' } as Parameters<
+        typeof api.getVerifyCode
+      >[0]);
       setSentTo(d.masked_target);
       setWait(d.resend_after);
     } catch (err) {
@@ -53,7 +55,9 @@ export function ForgotPage({ onDone, onBack }: { onDone: (notice: string) => voi
     setBusy(true);
     setError(null);
     try {
-      await api.forgotPassword({ ...ident, code_verify: code, new_password: pw } as Parameters<typeof api.forgotPassword>[0]);
+      await api.forgotPassword({ ...ident, code_verify: code, new_password: pw } as Parameters<
+        typeof api.forgotPassword
+      >[0]);
       onDone('Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.');
     } catch (err) {
       if (err instanceof ApiError && err.code === '9993') setCode('');
@@ -74,10 +78,19 @@ export function ForgotPage({ onDone, onBack }: { onDone: (notice: string) => voi
           </label>
         ) : (
           <>
-            <p className="hint">Mã 6 số đã gửi tới {sentTo}. Nếu server chưa cấu hình email, xem mã ở cửa sổ terminal đang chạy server.</p>
+            <p className="hint">
+              Mã 6 số đã gửi tới {sentTo}. Nếu server chưa cấu hình email, xem mã ở cửa sổ terminal đang chạy server.
+            </p>
             <label className="field">
               <span>Mã xác thực</span>
-              <input autoFocus inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} autoComplete="one-time-code" />
+              <input
+                autoFocus
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                autoComplete="one-time-code"
+              />
             </label>
             <label className="field">
               <span>Mật khẩu mới (6–20 chữ và số)</span>

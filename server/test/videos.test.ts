@@ -14,24 +14,71 @@ async function library() {
   const room = (await t.call('POST', '/rooms', {}, c)).data;
   const cams = [await t.remote(), await t.remote()];
   for (const [i, r] of cams.entries())
-    await t.call('POST', '/rooms/join', { invite_code: room.invite_code, device_id: r.device.device_id, camera_name: i ? 'Cam Phai' : 'Cam Trai', grant_control: true }, r.token);
+    await t.call(
+      'POST',
+      '/rooms/join',
+      {
+        invite_code: room.invite_code,
+        device_id: r.device.device_id,
+        camera_name: i ? 'Cam Phai' : 'Cam Trai',
+        grant_control: true,
+      },
+      r.token,
+    );
   const rs = (await t.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: 's' }, c)).data;
 
-  async function upload(r: (typeof cams)[number], uid: string, extra: Record<string, unknown> = {}, size = CHUNK + 500) {
+  async function upload(
+    r: (typeof cams)[number],
+    uid: string,
+    extra: Record<string, unknown> = {},
+    size = CHUNK + 500,
+  ) {
     const file = crypto.randomBytes(size);
-    const up = (await t.call('POST', '/videos/uploads', { local_video_uid: uid, file_name: `${uid}.mp4`, total_size: size, checksum_sha256: sha(file), duration_ms: 5000, ...extra }, r.token)).data;
+    const up = (
+      await t.call(
+        'POST',
+        '/videos/uploads',
+        {
+          local_video_uid: uid,
+          file_name: `${uid}.mp4`,
+          total_size: size,
+          checksum_sha256: sha(file),
+          duration_ms: 5000,
+          ...extra,
+        },
+        r.token,
+      )
+    ).data;
     for (let i = 0; i < up.total_chunks; i++) {
       const part = file.subarray(i * CHUNK, (i + 1) * CHUNK);
-      await t.app.inject({ method: 'PUT', url: `/api/videos/uploads/${up.upload_id}/chunks/${i}`, headers: { authorization: `Bearer ${r.token}`, 'content-type': 'application/octet-stream', 'x-chunk-sha256': sha(part) }, payload: part });
+      await t.app.inject({
+        method: 'PUT',
+        url: `/api/videos/uploads/${up.upload_id}/chunks/${i}`,
+        headers: {
+          authorization: `Bearer ${r.token}`,
+          'content-type': 'application/octet-stream',
+          'x-chunk-sha256': sha(part),
+        },
+        payload: part,
+      });
     }
     const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), crypto.randomBytes(300)]).toString('base64');
-    const vd = (await t.call('POST', `/videos/uploads/${up.upload_id}/complete`, { thumbnail_base64: jpg }, r.token)).data;
+    const vd = (await t.call('POST', `/videos/uploads/${up.upload_id}/complete`, { thumbnail_base64: jpg }, r.token))
+      .data;
     return { ...vd, file };
   }
-  const a = await upload(cams[0], 'a', { recording_session_id: rs.recording_session_id, recorded_at_ms: rs.execute_at_ms + 20 });
+  const a = await upload(cams[0], 'a', {
+    recording_session_id: rs.recording_session_id,
+    recorded_at_ms: rs.execute_at_ms + 20,
+  });
   t.advance(1);
   // Clip b lớn (4 MB) để kiểm tra trạng thái "đang tải dở"
-  const b = await upload(cams[1], 'b', { recording_session_id: rs.recording_session_id, recorded_at_ms: rs.execute_at_ms + 45 }, 4 * 1024 * 1024 + 7);
+  const b = await upload(
+    cams[1],
+    'b',
+    { recording_session_id: rs.recording_session_id, recorded_at_ms: rs.execute_at_ms + 45 },
+    4 * 1024 * 1024 + 7,
+  );
   t.advance(1);
   const solo = await upload(cams[0], 'solo');
   return { ...t, c, room, cams, rs, a, b, solo };
@@ -55,7 +102,9 @@ test('get_list_videos: Controller thấy mọi clip, có camera_name, phiên qua
 
   const session = await t.call('GET', `/videos?recording_session_id=${t.rs.recording_session_id}`, undefined, t.c);
   assert.equal(session.data.total, 2);
-  const byCam = Object.fromEntries(session.data.videos.map((x: any) => [x.camera_name, x.recorded_at_ms - t.rs.execute_at_ms]));
+  const byCam = Object.fromEntries(
+    session.data.videos.map((x: any) => [x.camera_name, x.recorded_at_ms - t.rs.execute_at_ms]),
+  );
   assert.deepEqual(byCam, { 'Cam Trai': 20, 'Cam Phai': 45 });
   const item = session.data.videos[0];
   assert.equal(item.room_id, t.room.room_id);
@@ -152,7 +201,10 @@ test('get_download_url: file tải về có tên gốc; đang có lượt tải 
 test('delete_video và delete_videos_bulk: xóa bản ghi + file; giới hạn 50; 4001', async () => {
   const t = await library();
   const paths = (id: string) =>
-    t.ctx.db.prepare('SELECT storage_path, thumbnail_path FROM videos WHERE id = ?').get(id) as { storage_path: string; thumbnail_path: string };
+    t.ctx.db.prepare('SELECT storage_path, thumbnail_path FROM videos WHERE id = ?').get(id) as {
+      storage_path: string;
+      thumbnail_path: string;
+    };
   const pa = paths(t.a.video_id);
   assert.equal((await t.call('DELETE', `/videos/${t.a.video_id}`, undefined, t.c)).code, '1000');
   assert.equal(fs.existsSync(pa.storage_path), false);
@@ -162,8 +214,17 @@ test('delete_video và delete_videos_bulk: xóa bản ghi + file; giới hạn 5
 
   assert.equal((await t.call('POST', '/videos/bulk-delete', {}, t.c)).code, '1002');
   assert.equal((await t.call('POST', '/videos/bulk-delete', { video_ids: 'x' }, t.c)).code, '1003');
-  assert.equal((await t.call('POST', '/videos/bulk-delete', { video_ids: Array.from({ length: 51 }, (_, i) => `vd_${i}`) }, t.c)).code, '1004');
-  const bulk = await t.call('POST', '/videos/bulk-delete', { video_ids: [t.b.video_id, t.solo.video_id, 'vd_khongco'] }, t.c);
+  assert.equal(
+    (await t.call('POST', '/videos/bulk-delete', { video_ids: Array.from({ length: 51 }, (_, i) => `vd_${i}`) }, t.c))
+      .code,
+    '1004',
+  );
+  const bulk = await t.call(
+    'POST',
+    '/videos/bulk-delete',
+    { video_ids: [t.b.video_id, t.solo.video_id, 'vd_khongco'] },
+    t.c,
+  );
   assert.equal(bulk.code, '1000');
   assert.deepEqual(bulk.data.deleted.sort(), [t.b.video_id, t.solo.video_id].sort());
   assert.deepEqual(bulk.data.not_found, ['vd_khongco']);

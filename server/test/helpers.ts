@@ -34,7 +34,10 @@ export async function setup() {
     const res = await app.inject({
       method: method as 'GET',
       url: `/api${url}`,
-      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      },
       payload: body ? JSON.stringify(body) : undefined,
     });
     return res.json() as { code: string; message: string; data: any };
@@ -59,7 +62,13 @@ export async function setup() {
       device_type: 2,
       device_name: `iPhone ${name}`,
     });
-    return { email, phone, token: r.data.access_token as string, refresh: r.data.refresh_token as string, device: r.data.device };
+    return {
+      email,
+      phone,
+      token: r.data.access_token as string,
+      refresh: r.data.refresh_token as string,
+      device: r.data.device,
+    };
   }
 
   async function controller() {

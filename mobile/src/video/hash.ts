@@ -27,7 +27,11 @@ const BLOCK = 256 * 1024;
  * SHA-256 toàn file. Expo không có hàm băm native theo từng phần nên dùng JS, đọc khối nhỏ và
  * nhường CPU sau mỗi khối; `busy()` = true (đang quay) thì tạm chờ để không làm trễ lệnh Start/Stop.
  */
-export async function fileSha256(file: File, total: number, opts: { busy: () => boolean; onProgress?: (p: number) => void }): Promise<string> {
+export async function fileSha256(
+  file: File,
+  total: number,
+  opts: { busy: () => boolean; onProgress?: (p: number) => void },
+): Promise<string> {
   const h = sha256.create();
   const handle = file.open(FileMode.ReadOnly);
   try {

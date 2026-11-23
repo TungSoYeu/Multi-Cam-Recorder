@@ -65,7 +65,11 @@ function mediaUrl(ctx: Ctx, req: FastifyRequest, kind: MediaKind, id: string, ui
   };
 }
 
-function verifyMedia(ctx: Ctx, req: FastifyRequest<{ Params: { id: string }; Querystring: Record<string, string> }>, kinds: MediaKind[]) {
+function verifyMedia(
+  ctx: Ctx,
+  req: FastifyRequest<{ Params: { id: string }; Querystring: Record<string, string> }>,
+  kinds: MediaKind[],
+) {
   const q = req.query;
   const kind = q.k as MediaKind;
   const exp = Number(q.e);
@@ -105,7 +109,13 @@ function removeFile(p: string | null, tries = 5) {
 }
 
 /** Gửi file có hỗ trợ Range (để <video> tua được). */
-function sendFile(req: FastifyRequest, reply: FastifyReply, file: string, type: string, onStream?: (s: fs.ReadStream) => void) {
+function sendFile(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  file: string,
+  type: string,
+  onStream?: (s: fs.ReadStream) => void,
+) {
   let size: number;
   try {
     size = fs.statSync(file).size;
@@ -138,7 +148,10 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
   const { db, config } = ctx;
 
   /** Controller thấy mọi video; Remote chỉ thấy video của mình. */
-  const scope = (auth: Auth) => (auth.user.role === 'controller' ? { sql: '1 = 1', args: [] as string[] } : { sql: 'v.owner_user_id = ?', args: [auth.user.id] });
+  const scope = (auth: Auth) =>
+    auth.user.role === 'controller'
+      ? { sql: '1 = 1', args: [] as string[] }
+      : { sql: 'v.owner_user_id = ?', args: [auth.user.id] };
 
   const payload = (req: FastifyRequest, auth: Auth, r: VideoListRow) => ({
     video_id: r.id,
@@ -193,7 +206,9 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
     const total = (db.prepare(`SELECT COUNT(*) AS n FROM videos v WHERE ${where}`).get(...args) as { n: number }).n;
     if (index >= total) fail(Codes.NO_DATA, undefined, { total });
     const rows = db
-      .prepare(`${SELECT} WHERE ${where} ORDER BY COALESCE(v.recorded_at, v.created_at) DESC, v.created_at DESC LIMIT ? OFFSET ?`)
+      .prepare(
+        `${SELECT} WHERE ${where} ORDER BY COALESCE(v.recorded_at, v.created_at) DESC, v.created_at DESC LIMIT ? OFFSET ?`,
+      )
       .all(...args, count, index) as unknown as VideoListRow[];
     return ok({
       videos: rows.map((r) => payload(req, auth, r)),
@@ -208,8 +223,15 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
   app.get<{ Params: { video_id: string } }>('/videos/:video_id', async (req) => {
     const auth = authenticate(ctx, req);
     const r = findOwned(auth, req.params.video_id);
-    const stream = auth.user.role === 'controller' ? mediaUrl(ctx, req, 'stream', r.id, auth.user.id, config.downloadUrlTtlSec) : null;
-    return ok({ ...payload(req, auth, r), stream_url: stream?.url ?? null, stream_expires_at: stream?.expires_at ?? null });
+    const stream =
+      auth.user.role === 'controller'
+        ? mediaUrl(ctx, req, 'stream', r.id, auth.user.id, config.downloadUrlTtlSec)
+        : null;
+    return ok({
+      ...payload(req, auth, r),
+      stream_url: stream?.url ?? null,
+      stream_expires_at: stream?.expires_at ?? null,
+    });
   });
 
   // 26. get_download_url — chỉ Controller; đang có lượt tải chưa xong → 4002 (client xếp hàng đợi)
@@ -219,7 +241,13 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
     const r = findOwned(auth, req.params.video_id);
     if (downloading(auth.user.id)) fail(Codes.DOWNLOAD_IN_PROGRESS);
     const link = mediaUrl(ctx, req, 'download', r.id, auth.user.id, config.downloadUrlTtlSec);
-    return ok({ video_id: r.id, file_name: r.file_name, size_bytes: r.size_bytes, download_url: link.url, expires_at: link.expires_at });
+    return ok({
+      video_id: r.id,
+      file_name: r.file_name,
+      size_bytes: r.size_bytes,
+      download_url: link.url,
+      expires_at: link.expires_at,
+    });
   });
 
   // 27. delete_video — chỉ Controller
@@ -240,15 +268,16 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = v.asBody(req.body);
     const ids = b.video_ids;
     if (ids === undefined || ids === null) fail(Codes.PARAM_NOT_ENOUGH, 'Missing video_ids', { field: 'video_ids' });
-    if (!Array.isArray(ids) || ids.some((x) => typeof x !== 'string')) fail(Codes.PARAM_TYPE_INVALID, 'video_ids must be a string array', { field: 'video_ids' });
+    if (!Array.isArray(ids) || ids.some((x) => typeof x !== 'string'))
+      fail(Codes.PARAM_TYPE_INVALID, 'video_ids must be a string array', { field: 'video_ids' });
     const list = [...new Set(ids as string[])];
-    if (list.length === 0 || list.length > MAX_BULK) fail(Codes.PARAM_VALUE_INVALID, `Select 1–${MAX_BULK} videos`, { field: 'video_ids', max: MAX_BULK });
+    if (list.length === 0 || list.length > MAX_BULK)
+      fail(Codes.PARAM_VALUE_INVALID, `Select 1–${MAX_BULK} videos`, { field: 'video_ids', max: MAX_BULK });
     const deleted: string[] = [];
     const notFound: string[] = [];
     for (const id of list) {
       const r = db.prepare('SELECT id, storage_path, thumbnail_path FROM videos WHERE id = ?').get(id) as
-        | { id: string; storage_path: string; thumbnail_path: string | null }
-        | undefined;
+        { id: string; storage_path: string; thumbnail_path: string | null } | undefined;
       if (!r) {
         notFound.push(id);
         continue;
@@ -268,23 +297,35 @@ export function videoRoutes(app: FastifyInstance, ctx: Ctx) {
     const m = verifyMedia(ctx, req, ['stream', 'download']);
     if (!m) return reply.code(403).send(envelope(Codes.NOT_ACCESS, 'Link expired or invalid'));
     const r = db.prepare('SELECT storage_path, file_name FROM videos WHERE id = ?').get(req.params.id) as
-      | { storage_path: string; file_name: string }
-      | undefined;
+      { storage_path: string; file_name: string } | undefined;
     if (!r) return reply.code(404).send(envelope(Codes.VIDEO_NOT_FOUND));
     if (m.kind === 'download') {
       const ascii = r.file_name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
-      reply.header('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(r.file_name)}`);
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(r.file_name)}`,
+      );
     }
     reply.header('Cache-Control', 'private, max-age=600');
-    return sendFile(req, reply, r.storage_path, 'video/mp4', m.kind === 'download' ? (s) => trackDownload(m.uid, s) : undefined);
+    return sendFile(
+      req,
+      reply,
+      r.storage_path,
+      'video/mp4',
+      m.kind === 'download' ? (s) => trackDownload(m.uid, s) : undefined,
+    );
   });
 
-  app.get<{ Params: { id: string }; Querystring: Record<string, string> }>('/media/thumbs/:id.jpg', async (req, reply) => {
-    const m = verifyMedia(ctx, req, ['thumb']);
-    if (!m) return reply.code(403).send(envelope(Codes.NOT_ACCESS, 'Link expired or invalid'));
-    const r = db.prepare('SELECT thumbnail_path FROM videos WHERE id = ?').get(req.params.id) as { thumbnail_path: string | null } | undefined;
-    if (!r?.thumbnail_path) return reply.code(404).send(envelope(Codes.VIDEO_NOT_FOUND));
-    reply.header('Cache-Control', 'private, max-age=3600');
-    return sendFile(req, reply, r.thumbnail_path, 'image/jpeg');
-  });
+  app.get<{ Params: { id: string }; Querystring: Record<string, string> }>(
+    '/media/thumbs/:id.jpg',
+    async (req, reply) => {
+      const m = verifyMedia(ctx, req, ['thumb']);
+      if (!m) return reply.code(403).send(envelope(Codes.NOT_ACCESS, 'Link expired or invalid'));
+      const r = db.prepare('SELECT thumbnail_path FROM videos WHERE id = ?').get(req.params.id) as
+        { thumbnail_path: string | null } | undefined;
+      if (!r?.thumbnail_path) return reply.code(404).send(envelope(Codes.VIDEO_NOT_FOUND));
+      reply.header('Cache-Control', 'private, max-age=3600');
+      return sendFile(req, reply, r.thumbnail_path, 'image/jpeg');
+    },
+  );
 }

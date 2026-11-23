@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-/** Nội dung access_token. `acc` = vai trò tài khoản, server chặn quyền dựa vào claim này (đề bài create_room). */
+/** Nội dung access_token. `acc` = vai trò tài khoản, server chặn quyền dựa vào claim này. */
 export interface AccessClaims {
   sub: string;
   acc: 'controller' | 'remote';
@@ -12,7 +12,8 @@ export interface AccessClaims {
 
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 const HEADER = b64({ alg: 'HS256', typ: 'JWT' });
-const mac = (data: string, secret: string) => crypto.createHmac('sha256', `jwt:${secret}`).update(data).digest('base64url');
+const mac = (data: string, secret: string) =>
+  crypto.createHmac('sha256', `jwt:${secret}`).update(data).digest('base64url');
 
 export function signJwt(claims: AccessClaims, secret: string): string {
   const data = `${HEADER}.${b64(claims)}`;
@@ -28,7 +29,9 @@ export function verifyJwt(token: string, secret: string): AccessClaims | null {
   if (expected.length !== got.length || !crypto.timingSafeEqual(expected, got)) return null;
   try {
     const c = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as AccessClaims;
-    return typeof c.sub === 'string' && typeof c.exp === 'number' && (c.acc === 'controller' || c.acc === 'remote') ? c : null;
+    return typeof c.sub === 'string' && typeof c.exp === 'number' && (c.acc === 'controller' || c.acc === 'remote')
+      ? c
+      : null;
   } catch {
     return null;
   }

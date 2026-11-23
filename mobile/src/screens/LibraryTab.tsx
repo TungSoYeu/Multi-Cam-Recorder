@@ -4,7 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { colors } from '../theme';
 import * as Sharing from 'expo-sharing';
-import { clipFile, deleteClips, formatBytes, formatDuration, listClips, subscribeClips, thumbFile, type LocalClip } from '../video/library';
+import {
+  clipFile,
+  deleteClips,
+  formatBytes,
+  formatDuration,
+  listClips,
+  subscribeClips,
+  thumbFile,
+  type LocalClip,
+} from '../video/library';
 import { blockedReason, resumeUploads, subscribeUploads, uploadUi, type UploadUi } from '../video/uploader';
 
 function uploadLabel(u: UploadUi): { text: string; color: string } {
@@ -39,7 +48,9 @@ export function LibraryTab() {
   const tileW = (width - 20 * 2 - 12) / 2;
 
   const reload = useCallback(() => {
-    listClips().then(setClips).catch(() => setClips([]));
+    listClips()
+      .then(setClips)
+      .catch(() => setClips([]));
   }, []);
 
   const [, setTick] = useState(0);
@@ -94,7 +105,13 @@ export function LibraryTab() {
   const barItems = [
     { icon: '💾', label: 'Lưu về máy', on: selected.size === 1, color: colors.text, run: saveToPhone },
     { icon: '🗑️', label: 'Xóa', on: selected.size > 0, color: colors.danger, run: removeSelected },
-    { icon: '⬆️', label: 'Tải lên', on: clips.some((c) => selected.has(c.id) && !c.uploaded), color: colors.text, run: resumeUploads },
+    {
+      icon: '⬆️',
+      label: 'Tải lên',
+      on: clips.some((c) => selected.has(c.id) && !c.uploaded),
+      color: colors.text,
+      run: resumeUploads,
+    },
   ];
 
   return (
@@ -155,7 +172,11 @@ export function LibraryTab() {
                   <Text style={{ fontSize: 28 }}>🎬</Text>
                 )}
                 <Text style={st.duration}>{formatDuration(item.duration_ms)}</Text>
-                {selecting ? <View style={[st.check, isSel && st.checkOn]}>{isSel ? <Text style={st.checkMark}>✓</Text> : null}</View> : null}
+                {selecting ? (
+                  <View style={[st.check, isSel && st.checkOn]}>
+                    {isSel ? <Text style={st.checkMark}>✓</Text> : null}
+                  </View>
+                ) : null}
                 {(() => {
                   const u = uploadUi(item);
                   const l = uploadLabel(u);
@@ -189,7 +210,13 @@ export function LibraryTab() {
       {selecting ? (
         <View style={st.bottomBar}>
           {barItems.map((b) => (
-            <Pressable key={b.label} onPress={b.run} disabled={!b.on} accessibilityRole="button" style={{ opacity: b.on ? 1 : 0.4, alignItems: 'center', minWidth: 80 }}>
+            <Pressable
+              key={b.label}
+              onPress={b.run}
+              disabled={!b.on}
+              accessibilityRole="button"
+              style={{ opacity: b.on ? 1 : 0.4, alignItems: 'center', minWidth: 80 }}
+            >
               <Text style={{ fontSize: 20 }}>{b.icon}</Text>
               <Text style={{ color: b.color, fontWeight: '600', fontSize: 12 }}>{b.label}</Text>
             </Pressable>
@@ -230,26 +257,92 @@ function Player({ clip, onClose }: { clip: LocalClip; onClose: () => void }) {
 }
 
 const st = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
   title: { color: colors.text, fontSize: 22, fontWeight: '700' },
   action: { color: colors.accent, fontSize: 16, fontWeight: '600' },
-  thumb: { borderRadius: 10, overflow: 'hidden', backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
-  duration: { position: 'absolute', right: 6, bottom: 6, color: '#fff', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
-  check: { position: 'absolute', left: 6, top: 6, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#fff', backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  thumb: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  duration: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  check: {
+    position: 'absolute',
+    left: 6,
+    top: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   checkMark: { color: colors.accentInk, fontWeight: '800', fontSize: 12 },
-  badge: { position: 'absolute', right: 6, top: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  badge: {
+    position: 'absolute',
+    right: 6,
+    top: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   badgeText: { color: colors.accent, fontSize: 10, fontWeight: '700', maxWidth: 110 },
-  progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
+  progressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
   progressBar: { height: 3, backgroundColor: colors.accent },
-  retry: { marginHorizontal: 20, marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: '#e5c33a1f', borderWidth: 1, borderColor: '#e5c33a66' },
+  retry: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#e5c33a1f',
+    borderWidth: 1,
+    borderColor: '#e5c33a66',
+  },
   retryText: { color: '#e5c33a', fontSize: 13, fontWeight: '600' },
   name: { color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 6 },
   meta: { color: colors.muted, fontSize: 11, marginTop: 2 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 80 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
   muted: { color: colors.muted, fontSize: 14, textAlign: 'center' },
-  bottomBar: { flexDirection: 'row', justifyContent: 'space-evenly', paddingVertical: 10, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   playerHeader: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   playerMeta: { color: '#aaa', textAlign: 'center', padding: 12, fontSize: 13 },
 });

@@ -4,7 +4,14 @@ import { ApiError, isEmail, type Identifier, type StoredSession, type VerifyPurp
 export type Route =
   | { name: 'login'; notice?: string; identifier?: string }
   | { name: 'signup' }
-  | { name: 'verify'; ident: Identifier; purpose: VerifyPurpose; masked?: string; devCode?: string; retryAfter?: number }
+  | {
+      name: 'verify';
+      ident: Identifier;
+      purpose: VerifyPurpose;
+      masked?: string;
+      devCode?: string;
+      retryAfter?: number;
+    }
   | { name: 'forgot' }
   | { name: 'newPassword'; ident: Identifier; code: string }
   | { name: 'server' }

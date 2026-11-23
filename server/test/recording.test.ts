@@ -9,11 +9,26 @@ async function studio(remotes = 2) {
   const cams: Awaited<ReturnType<typeof t.remote>>[] = [];
   for (let i = 0; i < remotes; i++) {
     const r = await t.remote();
-    await t.call('POST', '/rooms/join', { invite_code: room.invite_code, device_id: r.device.device_id, camera_name: `Cam ${i + 1}`, grant_control: true }, r.token);
+    await t.call(
+      'POST',
+      '/rooms/join',
+      {
+        invite_code: room.invite_code,
+        device_id: r.device.device_id,
+        camera_name: `Cam ${i + 1}`,
+        grant_control: true,
+      },
+      r.token,
+    );
     cams.push(r);
   }
   const sync = (r: (typeof cams)[number], body: Record<string, unknown> = {}) =>
-    t.call('POST', `/devices/${r.device.device_id}/sync`, { camera_facing: 'back', is_recording: false, ...body }, r.token);
+    t.call(
+      'POST',
+      `/devices/${r.device.device_id}/sync`,
+      { camera_facing: 'back', is_recording: false, ...body },
+      r.token,
+    );
   const start = (id: string) => t.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: id }, c);
   const stop = (id: string) => t.call('POST', `/rooms/${room.room_id}/recording/stop`, { client_command_id: id }, c);
   return { ...t, c, room, cams, sync, start, stop };
@@ -58,13 +73,20 @@ test('lệnh trùng client_command_id → 1010 kèm kết quả cũ; Start khi �
 
 test('quyền và tham số: Remote → 1009, thiếu client_command_id → 1002, phòng trống → 9994', async () => {
   const t = await studio(1);
-  assert.equal((await t.call('POST', `/rooms/${t.room.room_id}/recording/start`, { client_command_id: 'x' }, t.cams[0].token)).code, '1009');
+  assert.equal(
+    (await t.call('POST', `/rooms/${t.room.room_id}/recording/start`, { client_command_id: 'x' }, t.cams[0].token))
+      .code,
+    '1009',
+  );
   assert.equal((await t.call('POST', `/rooms/${t.room.room_id}/recording/start`, {}, t.c)).code, '1002');
 
   const empty = await setup();
   const c = await empty.controller();
   const room = (await empty.call('POST', '/rooms', {}, c)).data;
-  assert.equal((await empty.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: 'x' }, c)).code, '9994');
+  assert.equal(
+    (await empty.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: 'x' }, c)).code,
+    '9994',
+  );
 });
 
 test('ACK: lệnh đã xác nhận không giao lại; Controller thấy trạng thái từng máy', async () => {
@@ -97,7 +119,10 @@ test('stop_recording: mọi máy nhận lệnh dừng; trạng thái phòng về
   // Chưa tới giờ hẹn dừng: vẫn trả phiên kèm stop_at để máy lỡ lệnh dừng đúng giờ
   assert.equal(res.data.recording.recording_session_id, s.data.recording_session_id);
   assert.equal(res.data.recording.stop_at_ms, st.data.execute_at_ms);
-  assert.deepEqual(res.data.commands.map((x: any) => x.type), ['start_recording', 'stop_recording']);
+  assert.deepEqual(
+    res.data.commands.map((x: any) => x.type),
+    ['start_recording', 'stop_recording'],
+  );
   advance(2);
   assert.equal((await sync(cams[0])).data.recording, null);
 });
@@ -107,7 +132,12 @@ test('máy vào phòng muộn không nhận lệnh cũ, nhưng thấy phòng đa
   await t.start('a');
   t.advance(1);
   const late = await t.remote();
-  await t.call('POST', '/rooms/join', { invite_code: t.room.invite_code, device_id: late.device.device_id, camera_name: 'Late', grant_control: true }, late.token);
+  await t.call(
+    'POST',
+    '/rooms/join',
+    { invite_code: t.room.invite_code, device_id: late.device.device_id, camera_name: 'Late', grant_control: true },
+    late.token,
+  );
   const s = await t.sync(late);
   assert.equal(s.data.commands.length, 0);
   assert.equal(s.data.recording.status, 'recording');
@@ -127,14 +157,39 @@ test('đổi camera từ xa: chỉ máy đích nhận lệnh; đang quay → 200
   const { cams, sync, call, c, room, start } = await studio(2);
   const [a, b] = cams;
   const member = (await sync(a)).data.room.member_id;
-  const r = await call('POST', `/rooms/${room.room_id}/members/${member}/camera`, { camera_facing: 'front', client_command_id: 'f1' }, c);
+  const r = await call(
+    'POST',
+    `/rooms/${room.room_id}/members/${member}/camera`,
+    { camera_facing: 'front', client_command_id: 'f1' },
+    c,
+  );
   assert.equal(r.code, '1000');
   const got = (await sync(a)).data.commands;
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'switch_camera');
   assert.equal(got[0].camera_facing, 'front');
   assert.equal((await sync(b)).data.commands.length, 0);
-  assert.equal((await call('POST', `/rooms/${room.room_id}/members/${member}/camera`, { camera_facing: 'up', client_command_id: 'f2' }, c)).code, '1004');
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/rooms/${room.room_id}/members/${member}/camera`,
+        { camera_facing: 'up', client_command_id: 'f2' },
+        c,
+      )
+    ).code,
+    '1004',
+  );
   await start('s');
-  assert.equal((await call('POST', `/rooms/${room.room_id}/members/${member}/camera`, { camera_facing: 'back', client_command_id: 'f3' }, c)).code, '2006');
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/rooms/${room.room_id}/members/${member}/camera`,
+        { camera_facing: 'back', client_command_id: 'f3' },
+        c,
+      )
+    ).code,
+    '2006',
+  );
 });

@@ -20,6 +20,12 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "controller:password": "npm run controller:password -w @multicam/server",
     "demo": "node scripts/demo.mjs",
-    "demo:4g": "node scripts/demo.mjs --tunnel"
+    "demo:4g": "node scripts/demo.mjs --tunnel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "description": "Điều khiển nhiều điện thoại cùng quay video, bài tập lớn IT4409",
+  "devDependencies": {
+    "prettier": "^3.10.1"
   }
 }

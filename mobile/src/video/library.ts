@@ -71,12 +71,14 @@ async function writeIndex(clips: LocalClip[]) {
   cache = clips;
   listeners.forEach((fn) => fn());
   const json = JSON.stringify(clips);
-  writing = writing.catch(() => undefined).then(async () => {
-    ensureDir();
-    const f = indexFile();
-    if (!f.exists) f.create();
-    await f.write(json);
-  });
+  writing = writing
+    .catch(() => undefined)
+    .then(async () => {
+      ensureDir();
+      const f = indexFile();
+      if (!f.exists) f.create();
+      await f.write(json);
+    });
   await writing;
 }
 
@@ -193,7 +195,11 @@ export async function deleteClips(ids: string[]) {
 export const newClipId = () => Crypto.randomUUID();
 
 export const formatBytes = (n: number) =>
-  n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+  n >= 1e9
+    ? `${(n / 1e9).toFixed(1)} GB`
+    : n >= 1e6
+      ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} MB`
+      : `${Math.max(1, Math.round(n / 1e3))} KB`;
 
 export function formatDuration(ms: number) {
   const s = Math.round(ms / 1000);

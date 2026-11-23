@@ -2,14 +2,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.ts';
 
-const state = { camera_facing: 'front', is_recording: false, battery_level: 87, free_storage_bytes: 12_400_000_000, resolution: '1080p', fps: 30 };
+const state = {
+  camera_facing: 'front',
+  is_recording: false,
+  battery_level: 87,
+  free_storage_bytes: 12_400_000_000,
+  resolution: '1080p',
+  fps: 30,
+};
 
 async function roomWithRemote() {
   const t = await setup();
   const c = await t.controller();
   const room = await t.call('POST', '/rooms', {}, c);
   const r = await t.remote();
-  await t.call('POST', '/rooms/join', { invite_code: room.data.invite_code, device_id: r.device.device_id, camera_name: 'Cam Trai', grant_control: true }, r.token);
+  await t.call(
+    'POST',
+    '/rooms/join',
+    { invite_code: room.data.invite_code, device_id: r.device.device_id, camera_name: 'Cam Trai', grant_control: true },
+    r.token,
+  );
   return { ...t, c, room: room.data, r };
 }
 
@@ -29,9 +41,18 @@ test('sync_device: sai thiết bị → 1009; sai giá trị → 1004/1003', asy
   const { call, r, remote } = await roomWithRemote();
   const other = await remote();
   assert.equal((await call('POST', `/devices/${other.device.device_id}/sync`, state, r.token)).code, '1009');
-  assert.equal((await call('POST', `/devices/${r.device.device_id}/sync`, { camera_facing: 'side' }, r.token)).code, '1004');
-  assert.equal((await call('POST', `/devices/${r.device.device_id}/sync`, { battery_level: 150 }, r.token)).code, '1004');
-  assert.equal((await call('POST', `/devices/${r.device.device_id}/sync`, { battery_level: 'full' }, r.token)).code, '1003');
+  assert.equal(
+    (await call('POST', `/devices/${r.device.device_id}/sync`, { camera_facing: 'side' }, r.token)).code,
+    '1004',
+  );
+  assert.equal(
+    (await call('POST', `/devices/${r.device.device_id}/sync`, { battery_level: 150 }, r.token)).code,
+    '1004',
+  );
+  assert.equal(
+    (await call('POST', `/devices/${r.device.device_id}/sync`, { battery_level: 'full' }, r.token)).code,
+    '1003',
+  );
   assert.equal((await call('POST', `/devices/${r.device.device_id}/sync`, {}, r.token)).code, '1000');
 });
 
@@ -44,7 +65,17 @@ test('sync_device báo lý do khi bị kick hoặc phòng đóng', async () => {
   assert.equal(s2.data.last_left_reason, 'kicked');
 
   const renewed = await call('POST', '/rooms', {}, c);
-  await call('POST', '/rooms/join', { invite_code: renewed.data.invite_code, device_id: r.device.device_id, camera_name: 'Cam Trai', grant_control: true }, r.token);
+  await call(
+    'POST',
+    '/rooms/join',
+    {
+      invite_code: renewed.data.invite_code,
+      device_id: r.device.device_id,
+      camera_name: 'Cam Trai',
+      grant_control: true,
+    },
+    r.token,
+  );
   await call('DELETE', `/rooms/${room.room_id}`, undefined, c);
   const s3 = await call('POST', `/devices/${r.device.device_id}/sync`, state, r.token);
   assert.equal(s3.data.last_left_reason, 'closed');
@@ -67,7 +98,18 @@ test('sync_room: Controller thấy danh sách máy kèm trạng thái', async ()
   assert.equal(m.is_online, '1');
   assert.deepEqual(
     { ...m.state, updated_at: undefined },
-    { camera_facing: 'front', is_recording: '1', battery_level: 87, free_storage_bytes: 12_400_000_000, resolution: '1080p', fps: 30, uploads_pending: 0, upload_progress: null, live_uploaded_bytes: null, updated_at: undefined },
+    {
+      camera_facing: 'front',
+      is_recording: '1',
+      battery_level: 87,
+      free_storage_bytes: 12_400_000_000,
+      resolution: '1080p',
+      fps: 30,
+      uploads_pending: 0,
+      upload_progress: null,
+      live_uploaded_bytes: null,
+      updated_at: undefined,
+    },
   );
 
   advance(16);

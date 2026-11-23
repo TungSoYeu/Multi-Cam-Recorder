@@ -33,8 +33,29 @@ function run(bin: string, args: string[], timeoutMs = 120_000): Promise<boolean>
  * Chỉ lấy luồng hình và tiếng (bỏ luồng metadata riêng của iPhone mà MP4 không chứa được).
  */
 export const remuxToMp4 = (bin: string, input: string, output: string) =>
-  run(bin, ['-y', '-v', 'error', '-i', input, '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', output]);
+  run(bin, [
+    '-y',
+    '-v',
+    'error',
+    '-i',
+    input,
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:a:0?',
+    '-c',
+    'copy',
+    '-movflags',
+    '+faststart',
+    '-f',
+    'mp4',
+    output,
+  ]);
 
 /** Ảnh thu nhỏ rộng 480px lấy ở giây 0,5. */
 export const makeThumbnail = (bin: string, input: string, output: string) =>
-  run(bin, ['-y', '-v', 'error', '-ss', '0.5', '-i', input, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', output], 30_000);
+  run(
+    bin,
+    ['-y', '-v', 'error', '-ss', '0.5', '-i', input, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', output],
+    30_000,
+  );

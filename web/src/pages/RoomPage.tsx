@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { ApiError, ClockSync, type RecordingState, type RoomData, type StoredSession, type SyncRoomData } from '@multicam/shared';
+import {
+  ApiError,
+  ClockSync,
+  type RecordingState,
+  type RoomData,
+  type StoredSession,
+  type SyncRoomData,
+} from '@multicam/shared';
 import { api, uuid } from '../api.ts';
 import { CameraIcon, CloseIcon, CopyIcon, DoorIcon, FolderIcon, GearIcon, QrIcon } from '../components/Icons.tsx';
 import { SettingsModal } from '../components/SettingsModal.tsx';
@@ -97,7 +104,7 @@ export function RoomPage({
     openRoom();
   }, [openRoom]);
 
-  // QR chứa đúng nội dung mã mời (đề bài create_room)
+  // QR chứa đúng nội dung mã mời
   useEffect(() => {
     if (!room) return;
     QRCode.toDataURL(room.invite_code, { margin: 1, width: 360, color: { dark: '#111111', light: '#ffffff' } })
@@ -119,7 +126,8 @@ export function RoomPage({
         setMembers(d.members);
         setVideosReceived(d.videos_received);
         if (Date.now() > holdUntil.current) setRecording(d.recording);
-        if (d.invite_code !== room.invite_code) setRoom((r) => (r ? { ...r, invite_code: d.invite_code, expires_at: d.expires_at } : r));
+        if (d.invite_code !== room.invite_code)
+          setRoom((r) => (r ? { ...r, invite_code: d.invite_code, expires_at: d.expires_at } : r));
         setError(null);
       } catch (e) {
         if (stop) return;
@@ -158,12 +166,15 @@ export function RoomPage({
       } else {
         const r = await withRetry(() => api.stopRecording(room.room_id, id));
         holdUntil.current = Date.now() + 1500;
-        setRecording((cur) => (cur ? { ...cur, status: 'stopped', stop_at: r.execute_at, stop_at_ms: r.execute_at_ms } : cur));
+        setRecording((cur) =>
+          cur ? { ...cur, status: 'stopped', stop_at: r.execute_at, stop_at_ms: r.execute_at_ms } : cur,
+        );
         setLastDuration(r.duration_ms ?? 0);
       }
     } catch (e) {
       if (e instanceof ApiError && e.code === '9994') alert('Phòng chưa có máy Remote nào.');
-      else if (e instanceof ApiError && e.code === '2006') holdUntil.current = 0; // lệch trạng thái → lấy lại ở lần sync tới
+      else if (e instanceof ApiError && e.code === '2006')
+        holdUntil.current = 0; // lệch trạng thái → lấy lại ở lần sync tới
       else alert(errMsg(e));
     } finally {
       setSending(false);
@@ -275,7 +286,15 @@ export function RoomPage({
             </button>
           </div>
         ) : !room ? (
-          <div className="empty-state">{busy ? 'Đang mở phòng…' : <button className="primary" onClick={openRoom}>Thử lại</button>}</div>
+          <div className="empty-state">
+            {busy ? (
+              'Đang mở phòng…'
+            ) : (
+              <button className="primary" onClick={openRoom}>
+                Thử lại
+              </button>
+            )}
+          </div>
         ) : (
           <div className={`grid count-${Math.min(slots, 9)}`}>
             {members.map((m, i) => {
@@ -292,7 +311,9 @@ export function RoomPage({
                     </span>
                     <span className="stats">
                       {s ? <Battery level={s.battery_level} /> : null}
-                      {s?.free_storage_bytes != null ? <span title="Dung lượng trống">💾 {gb(s.free_storage_bytes)}</span> : null}
+                      {s?.free_storage_bytes != null ? (
+                        <span title="Dung lượng trống">💾 {gb(s.free_storage_bytes)}</span>
+                      ) : null}
                       <button className="icon-btn small" title="Loại khỏi phòng" onClick={() => kick(m)}>
                         <CloseIcon size={14} />
                       </button>
@@ -311,7 +332,8 @@ export function RoomPage({
                     ) : null}
                     {s && s.uploads_pending > 0 ? (
                       <span className="upload" title="Clip đang chờ / đang tải lên server">
-                        ⬆ {s.uploads_pending} clip{s.upload_progress !== null ? ` · ${s.upload_progress}%` : ' chờ tải lên'}
+                        ⬆ {s.uploads_pending} clip
+                        {s.upload_progress !== null ? ` · ${s.upload_progress}%` : ' chờ tải lên'}
                         {s.upload_progress !== null ? (
                           <span className="upload-track">
                             <span style={{ width: `${s.upload_progress}%` }} />
@@ -321,13 +343,20 @@ export function RoomPage({
                     ) : null}
                     {cmd ? (
                       <span className={`cmd ${cmd.status}`} title="Trạng thái lệnh gần nhất">
-                        {CMD_LABEL[cmd.type]}: {cmd.status === 'done' ? 'đã thực hiện' : cmd.status === 'failed' ? 'thất bại' : 'chờ máy nhận…'}
+                        {CMD_LABEL[cmd.type]}:{' '}
+                        {cmd.status === 'done'
+                          ? 'đã thực hiện'
+                          : cmd.status === 'failed'
+                            ? 'thất bại'
+                            : 'chờ máy nhận…'}
                       </span>
                     ) : null}
                   </div>
                   <div className="tile-foot">
                     <span className="mono">
-                      {s?.resolution ? `${s.resolution} · ${s.fps ?? 30}fps` : `${m.device_name} · ${DEVICE_LABEL[m.device_type] ?? ''}`}
+                      {s?.resolution
+                        ? `${s.resolution} · ${s.fps ?? 30}fps`
+                        : `${m.device_name} · ${DEVICE_LABEL[m.device_type] ?? ''}`}
                     </span>
                     <span className="foot-actions">
                       <button
@@ -338,7 +367,9 @@ export function RoomPage({
                       >
                         🔄
                       </button>
-                      <span className={`badge ${rec ? 'rec' : on ? 'ok' : 'off'}`}>{rec ? 'ON AIR' : on ? 'ONLINE' : 'OFFLINE'}</span>
+                      <span className={`badge ${rec ? 'rec' : on ? 'ok' : 'off'}`}>
+                        {rec ? 'ON AIR' : on ? 'ONLINE' : 'OFFLINE'}
+                      </span>
                     </span>
                   </div>
                 </article>
@@ -364,7 +395,9 @@ export function RoomPage({
               </button>
             </div>
             <p className="muted">Mở app trên điện thoại → Quét QR hoặc nhập mã</p>
-            <div className={`qr ${expired ? 'expired' : ''}`}>{qr && <img src={qr} alt={`Mã QR của mã mời ${room.invite_code}`} />}</div>
+            <div className={`qr ${expired ? 'expired' : ''}`}>
+              {qr && <img src={qr} alt={`Mã QR của mã mời ${room.invite_code}`} />}
+            </div>
             <div className="big-code">{room.invite_code}</div>
             {expired ? (
               <button className="primary" onClick={openRoom} disabled={busy}>
@@ -392,7 +425,13 @@ export function RoomPage({
             className={`rec-btn ${isRecording ? 'on' : ''}`}
             onClick={toggleRecording}
             disabled={!room || closed || sending || members.length === 0 || (!!recording && !!recording.stop_at_ms)}
-            title={members.length === 0 ? 'Phòng chưa có máy nào' : isRecording ? 'Dừng quay tất cả máy' : 'Bắt đầu quay tất cả máy'}
+            title={
+              members.length === 0
+                ? 'Phòng chưa có máy nào'
+                : isRecording
+                  ? 'Dừng quay tất cả máy'
+                  : 'Bắt đầu quay tất cả máy'
+            }
             aria-label={isRecording ? 'Dừng quay' : 'Bắt đầu quay'}
           >
             <span />
@@ -409,7 +448,9 @@ export function RoomPage({
         </div>
       </footer>
 
-      {showSettings && <SettingsModal session={session} onClose={() => setShowSettings(false)} onLoggedOut={onLoggedOut} />}
+      {showSettings && (
+        <SettingsModal session={session} onClose={() => setShowSettings(false)} onLoggedOut={onLoggedOut} />
+      )}
     </div>
   );
 }

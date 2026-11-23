@@ -13,7 +13,7 @@ import { root } from './fakes/fs.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function until(f: () => boolean | Promise<boolean>, what: string, ms = 15000) {
-  for (const end = Date.now() + ms; Date.now() < end; ) {
+  for (const end = Date.now() + ms; Date.now() < end;) {
     if (await f()) return;
     await sleep(50);
   }
@@ -43,7 +43,9 @@ function tmpClip(size: number) {
   return 'file://' + p;
 }
 const stored = (id: string) =>
-  fs.readFileSync((t.ctx.db.prepare('SELECT storage_path AS p FROM videos WHERE local_video_uid = ?').get(id) as { p: string }).p);
+  fs.readFileSync(
+    (t.ctx.db.prepare('SELECT storage_path AS p FROM videos WHERE local_video_uid = ?').get(id) as { p: string }).p,
+  );
 const meta = (id: string) => ({
   id,
   startedAt: Date.now(),
@@ -71,7 +73,7 @@ test('lưu clip iPhone: chờ move xong, đúng kích thước, thành MP4, có 
   await login();
   const id = lib.newClipId();
   const clip = await lib.saveRecording(tmpClip(700_000), meta(id));
-  assert.equal(clip.size_bytes, 700_032); // lỗi cũ: đọc kích thước trước khi move xong → 0
+  assert.equal(clip.size_bytes, 700_032); // phải chờ move xong mới đọc kích thước
   assert.equal(clip.has_thumbnail, true);
   assert.equal(clip.container, 'mp4');
   up.kickUploads();
@@ -86,7 +88,13 @@ test('upload NGAY TRONG LÚC QUAY; dừng quay chỉ gửi lại mảnh đã đ�
   const id = lib.newClipId();
   const known = cameraFilesBefore();
   up.holdUpload(id);
-  const live = startLiveUpload(known, { id, startedAt: Date.now(), facing: 'back', recordingSessionId: null, startedAtServerMs: null });
+  const live = startLiveUpload(known, {
+    id,
+    startedAt: Date.now(),
+    facing: 'back',
+    recordingSessionId: null,
+    startedAtServerMs: null,
+  });
   const p = path.join(camDir, 'dang-quay.mov');
   fs.writeFileSync(p, movHead());
   net.puts = [];

@@ -32,7 +32,7 @@ console.log(`
   Multi-Cam Recorder server
   - CSDL:        ${config.dbPath}
   - Controller:  ${seeded.email} (${seeded.status === 'created' ? 'vừa tạo' : 'đã có'})
-  - Email OTP:   ${sender ? 'gửi qua SMTP' : 'chưa cấu hình SMTP_URL — mã trả trong API như đề bài'}
+  - Email OTP:   ${sender ? 'gửi qua SMTP' : 'chưa cấu hình SMTP_URL, mã trả trong response'}
   - Local:       http://localhost:${config.port}        (giao diện Controller)
   - API:         http://localhost:${config.port}/api
   - ffmpeg:      ${ffmpegAvailable(config.ffmpegPath) ? 'có (remux MP4 + ảnh thu nhỏ)' : 'không có — video giữ nguyên file từ máy quay'}
@@ -41,8 +41,7 @@ console.log(`
 `);
 
 if (seeded.generated) console.log(`  >>> Mật khẩu Controller (chỉ hiện lần này): ${seeded.generated}\n`);
-if (seeded.leaked)
-  console.warn('  !!! Controller đang dùng mật khẩu quá yếu. Chạy: npm run controller:password\n');
+if (seeded.weak) console.warn('  !!! Mật khẩu Controller quá yếu. Đổi bằng: npm run controller:password\n');
 
 // Dọn phiên upload quá hạn mỗi 30 phút
 cleanupExpiredUploads(ctx);

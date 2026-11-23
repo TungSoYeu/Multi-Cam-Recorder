@@ -11,14 +11,27 @@ export function parseInvite(text: string): string | null {
   return m ? m[0] : null;
 }
 
-export function QrScanner({ visible, onClose, onCode }: { visible: boolean; onClose: () => void; onCode: (code: string) => void }) {
+export function QrScanner({
+  visible,
+  onClose,
+  onCode,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onCode: (code: string) => void;
+}) {
   const [permission, requestPermission] = useCameraPermissions();
   const done = useRef(false);
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} onShow={() => {
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+      onShow={() => {
         done.current = false;
-      }}>
+      }}
+    >
       <SafeAreaView style={st.wrap}>
         <Text style={st.title}>Quét mã QR phòng</Text>
         <Text style={st.sub}>Hướng camera vào mã QR trên màn hình Controller</Text>
@@ -57,6 +70,13 @@ const st = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg, padding: 20, gap: 12 },
   title: { color: colors.text, fontSize: 22, fontWeight: '700', marginTop: 8 },
   sub: { color: colors.muted, fontSize: 14, textAlign: 'center' },
-  frame: { flex: 1, borderRadius: 16, overflow: 'hidden', backgroundColor: '#000', borderWidth: 2, borderColor: colors.accent },
+  frame: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
 });

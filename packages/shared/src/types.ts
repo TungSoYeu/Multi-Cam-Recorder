@@ -1,6 +1,6 @@
 export type AccountRole = 'controller' | 'remote';
 export type VerifyPurpose = 'signup' | 'forgot_password';
-/** 1 = android, 2 = ios, 4 = web (theo đề bài login). */
+/** 1 = android, 2 = ios, 4 = web */
 export type DeviceType = 1 | 2 | 4;
 
 export interface ApiEnvelope<T> {
@@ -73,7 +73,7 @@ export type LoginRequest = Identifier & { password: string } & DeviceInfo;
 export interface TokenData {
   access_token: string;
   refresh_token: string;
-  /** refresh_token trả chuỗi "3600" theo đề bài; change_password trả số */
+  /** refresh_token trả chuỗi "3600"; change_password trả số */
   expires_in: number | string;
 }
 
@@ -244,7 +244,7 @@ export interface RoomMembersData {
   members: RoomMember[];
 }
 
-// ===== D — Upload theo mảnh =====
+// ===== D. Upload theo mảnh =====
 
 export interface InitUploadRequest {
   /** UUID của clip sinh trên máy — cùng với checksum dùng để chống upload trùng (3005) */
@@ -308,7 +308,7 @@ export interface VideoInfo {
   created_at: string;
 }
 
-// ===== E — Thư viện video trên server =====
+// ===== E. Thư viện video trên server =====
 
 export interface LibraryVideo {
   video_id: string;

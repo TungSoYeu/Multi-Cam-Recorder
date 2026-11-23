@@ -42,7 +42,7 @@ export function LibraryPage({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       const all: LibraryVideo[] = [];
-      for (let index = 0; ; ) {
+      for (let index = 0; ;) {
         const page = await api.listVideos({ index, count: 100 });
         all.push(...page.videos);
         if (page.has_more !== '1' || !page.count) break;
@@ -70,7 +70,13 @@ export function LibraryPage({ onBack }: { onBack: () => void }) {
       vs.sort((a, b) => (a.camera_name ?? '').localeCompare(b.camera_name ?? ''));
       const size = vs.reduce((s, v) => s + v.size_bytes, 0);
       if (key === 'solo')
-        return { key, title: 'Quay độc lập', subtitle: `${vs.length} clip · ${fmtBytes(size)}`, videos: vs, syncable: false };
+        return {
+          key,
+          title: 'Quay độc lập',
+          subtitle: `${vs.length} clip · ${fmtBytes(size)}`,
+          videos: vs,
+          syncable: false,
+        };
       const started = vs[0].session_started_at ?? vs[0].recorded_at ?? vs[0].created_at;
       const cams = new Set(vs.map((v) => v.device_id)).size;
       return {
@@ -221,10 +227,16 @@ export function LibraryPage({ onBack }: { onBack: () => void }) {
                       title={v.file_name}
                     >
                       <div className="lib-thumb">
-                        {v.thumbnail_url ? <img src={v.thumbnail_url} alt="" loading="lazy" /> : <CameraIcon size={30} />}
+                        {v.thumbnail_url ? (
+                          <img src={v.thumbnail_url} alt="" loading="lazy" />
+                        ) : (
+                          <CameraIcon size={30} />
+                        )}
                         <span className="lib-duration">{fmtDuration(v.duration_ms)}</span>
                         {v.camera_name ? <span className="lib-cam">{v.camera_name}</span> : null}
-                        {selecting ? <span className={`lib-check ${isSel ? 'on' : ''}`}>{isSel ? '✓' : ''}</span> : null}
+                        {selecting ? (
+                          <span className={`lib-check ${isSel ? 'on' : ''}`}>{isSel ? '✓' : ''}</span>
+                        ) : null}
                       </div>
                       <span className="lib-name">{v.file_name}</span>
                       <span className="muted small">
@@ -241,7 +253,11 @@ export function LibraryPage({ onBack }: { onBack: () => void }) {
 
       {selecting && (
         <footer className="control-bar lib-bar">
-          <span className="muted">{selected.size ? `${selected.size} clip · ${fmtBytes(chosen.reduce((s, v) => s + v.size_bytes, 0))}` : 'Chọn clip để tải về hoặc xóa'}</span>
+          <span className="muted">
+            {selected.size
+              ? `${selected.size} clip · ${fmtBytes(chosen.reduce((s, v) => s + v.size_bytes, 0))}`
+              : 'Chọn clip để tải về hoặc xóa'}
+          </span>
           <div className="bar-actions">
             <button className="secondary" disabled={!selected.size || !!dlStatus} onClick={() => download(chosen)}>
               ⬇ Tải về

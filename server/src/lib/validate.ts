@@ -34,7 +34,7 @@ export function optStr(b: Body, name: string, o: StrOpts = {}): string | undefin
   return missing(b[name]) ? undefined : str(b, name, o);
 }
 
-/** Số nguyên (chấp nhận cả dạng chuỗi "8" như đề bài). */
+/** Số nguyên (chấp nhận cả dạng chuỗi "8"). */
 export function optInt(b: Body, name: string, min: number, max: number): number | undefined {
   const v = b[name];
   if (missing(v)) return undefined;
@@ -44,12 +44,13 @@ export function optInt(b: Body, name: string, min: number, max: number): number 
   return n;
 }
 
-/** Số nguyên thật sự (đề bài 1003: gửi battery_level dạng chuỗi là sai kiểu). */
+/** Số nguyên thật sự (battery_level dạng chuỗi là sai kiểu, mã 1003). */
 export function optStrictInt(b: Body, name: string, min: number, max: number): number | undefined {
   const x = b[name];
   if (x === undefined || x === null) return undefined;
   if (typeof x !== 'number') return fail(Codes.PARAM_TYPE_INVALID, `${name} must be a number`, { field: name });
-  if (!Number.isInteger(x) || x < min || x > max) return fail(Codes.PARAM_VALUE_INVALID, `Invalid ${name}`, { field: name });
+  if (!Number.isInteger(x) || x < min || x > max)
+    return fail(Codes.PARAM_VALUE_INVALID, `Invalid ${name}`, { field: name });
   return x;
 }
 
@@ -70,11 +71,12 @@ export function bool(b: Body, name: string): boolean {
 
 export const email = (b: Body, name = 'email') => str(b, name, { max: 120, pattern: EMAIL_RE }).toLowerCase();
 export const phone = (b: Body, name = 'phone') => str(b, name, { pattern: PHONE_RE });
-export const password = (b: Body, name = 'password') => str(b, name, { trim: false, pattern: PASSWORD_RE, min: 6, max: 20 });
+export const password = (b: Body, name = 'password') =>
+  str(b, name, { trim: false, pattern: PASSWORD_RE, min: 6, max: 20 });
 
 export type Ident = { kind: 'email'; value: string } | { kind: 'phone'; value: string };
 
-/** Định danh: email HOẶC phone (đề bài ghi "email/phone"). */
+/** Định danh: email HOẶC phone. */
 export function identifier(b: Body): Ident {
   if (!missing(b.email)) return { kind: 'email', value: email(b) };
   if (!missing(b.phone)) return { kind: 'phone', value: phone(b) };

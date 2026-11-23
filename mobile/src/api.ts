@@ -59,7 +59,10 @@ export async function setServerUrl(url: string) {
   serverUrl = normalizeServer(url);
   serverListeners.forEach((fn) => fn());
   const recent = [serverUrl, ...((await readSaved())?.recent ?? []).filter((u) => u !== serverUrl)].slice(0, 5);
-  await SecureStore.setItemAsync(SERVER_KEY, JSON.stringify({ url: serverUrl, def: normalizeServer(DEFAULT_SERVER), recent } satisfies SavedServer));
+  await SecureStore.setItemAsync(
+    SERVER_KEY,
+    JSON.stringify({ url: serverUrl, def: normalizeServer(DEFAULT_SERVER), recent } satisfies SavedServer),
+  );
 }
 
 /** Các máy chủ để chọn: mặc định của buổi demo + những địa chỉ đã dùng. */

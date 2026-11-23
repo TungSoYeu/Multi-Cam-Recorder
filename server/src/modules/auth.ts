@@ -50,7 +50,8 @@ function deviceInput(b: v.Body, required: boolean): DeviceInput | null {
   if (!required && b.device_id === undefined && b.device_type === undefined && b.device_name === undefined) return null;
   const client_device_id = v.str(b, 'device_id', { max: 100 });
   const device_type = v.int(b, 'device_type', 1, 4);
-  if (![1, 2, 4].includes(device_type)) fail(Codes.PARAM_VALUE_INVALID, 'Invalid device_type', { field: 'device_type' });
+  if (![1, 2, 4].includes(device_type))
+    fail(Codes.PARAM_VALUE_INVALID, 'Invalid device_type', { field: 'device_type' });
   const device_name = v.str(b, 'device_name', { max: 60 });
   return { client_device_id, device_type: device_type as 1 | 2 | 4, device_name };
 }
@@ -83,7 +84,10 @@ function issueTokens(ctx: Ctx, user: Pick<UserRow, 'id' | 'role'>, sessionId: st
   const iat = Math.floor(ctx.now() / 1000);
   const exp = iat + ctx.config.accessTtlSec;
   return {
-    access: signJwt({ sub: user.id, acc: user.role, sid: sessionId, jti: newId('j', 12), iat, exp }, ctx.config.mediaSecret),
+    access: signJwt(
+      { sub: user.id, acc: user.role, sid: sessionId, jti: newId('j', 12), iat, exp },
+      ctx.config.mediaSecret,
+    ),
     refresh: newToken('rt'),
     accessExp: exp * 1000,
   };
@@ -156,7 +160,9 @@ export function closeOwnerRooms(ctx: Ctx, ownerId: string) {
   for (const r of rooms) {
     ctx.db.prepare(`UPDATE rooms SET status = 'closed', closed_at = ? WHERE id = ?`).run(now, r.id);
     ctx.db
-      .prepare(`UPDATE recording_sessions SET status = 'stopped', stopped_at = ? WHERE room_id = ? AND status = 'recording'`)
+      .prepare(
+        `UPDATE recording_sessions SET status = 'stopped', stopped_at = ? WHERE room_id = ? AND status = 'recording'`,
+      )
       .run(now, r.id);
     ctx.db
       .prepare(`UPDATE room_members SET left_at = ?, left_reason = 'closed' WHERE room_id = ? AND left_at IS NULL`)
@@ -187,7 +193,8 @@ function consumeVerifyCode(ctx: Ctx, user: UserRow, purpose: Purpose, code: stri
 
 function purposeOf(b: v.Body): Purpose {
   const p = v.str(b, 'purpose', { max: 20 });
-  if (p !== 'signup' && p !== 'forgot_password') return fail(Codes.PARAM_VALUE_INVALID, 'Invalid purpose', { field: 'purpose' });
+  if (p !== 'signup' && p !== 'forgot_password')
+    return fail(Codes.PARAM_VALUE_INVALID, 'Invalid purpose', { field: 'purpose' });
   return p;
 }
 
@@ -273,7 +280,10 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     }
     if (!emailed && !returnCode && !isController) {
       // Không có cách nào để người dùng nhận mã → cho gọi lại ngay thay vì bắt chờ 120 giây
-      db.prepare('DELETE FROM verify_codes WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL').run(user.id, purpose);
+      db.prepare('DELETE FROM verify_codes WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL').run(
+        user.id,
+        purpose,
+      );
       return fail(Codes.UNKNOWN_ERROR, 'Cannot deliver verification code');
     }
     return ok({
@@ -313,7 +323,10 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!(await verifyPassword(password, user.password_hash)))
       return fail(Codes.PARAM_VALUE_INVALID, 'Password is incorrect', { field: 'password' });
     if (!user.active)
-      return fail(Codes.USER_NOT_VALIDATED, 'Account is not activated', { reason: 'not_verified', verify_required: '1' });
+      return fail(Codes.USER_NOT_VALIDATED, 'Account is not activated', {
+        reason: 'not_verified',
+        verify_required: '1',
+      });
     if (user.locked) return fail(Codes.USER_NOT_VALIDATED, 'Account is locked', { reason: 'locked' });
     const payload = tx(db, () => {
       const device = upsertDevice(ctx, user.id, dev);
@@ -327,16 +340,18 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = v.asBody(req.body);
     const hash = sha256(v.str(b, 'refresh_token', { max: 200 }));
     const now = ctx.now();
-    const s = db
-      .prepare('SELECT id, refresh_expires_at, revoked_at FROM sessions WHERE refresh_hash = ?')
-      .get(hash) as { id: string; refresh_expires_at: number; revoked_at: number | null } | undefined;
+    const s = db.prepare('SELECT id, refresh_expires_at, revoked_at FROM sessions WHERE refresh_hash = ?').get(hash) as
+      { id: string; refresh_expires_at: number; revoked_at: number | null } | undefined;
     if (!s) {
       // Token cũ bị dùng lại → có thể bị lộ: thu hồi cả phiên.
-      db.prepare('UPDATE sessions SET revoked_at = ? WHERE prev_refresh_hash = ? AND revoked_at IS NULL').run(now, hash);
+      db.prepare('UPDATE sessions SET revoked_at = ? WHERE prev_refresh_hash = ? AND revoked_at IS NULL').run(
+        now,
+        hash,
+      );
       return fail(Codes.TOKEN_INVALID);
     }
     if (s.revoked_at || s.refresh_expires_at <= now) return fail(Codes.TOKEN_INVALID);
-    // Đề bài refresh_token: expires_in là chuỗi "3600"
+    // Đề bài quy định expires_in của refresh_token là chuỗi "3600"
     const t = rotateSession(ctx, s.id, hash);
     return ok({ ...t, expires_in: String(t.expires_in) });
   });
@@ -371,7 +386,8 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!(await verifyPassword(current, auth.user.password_hash)))
       fail(Codes.PARAM_VALUE_INVALID, 'Password is incorrect', { field: 'password' });
     if (next === current) fail(Codes.PARAM_VALUE_INVALID, 'New password must differ', { field: 'new_password' });
-    if (next === auth.user.phone) fail(Codes.PARAM_VALUE_INVALID, 'Password must not equal phone', { field: 'new_password' });
+    if (next === auth.user.phone)
+      fail(Codes.PARAM_VALUE_INVALID, 'Password must not equal phone', { field: 'new_password' });
     const hash = await hashPassword(next);
     const tokens = tx(db, () => {
       const now = ctx.now();
@@ -408,11 +424,12 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     const files = db
       .prepare('SELECT storage_path, thumbnail_path FROM videos WHERE owner_user_id = ?')
       .all(auth.user.id) as { storage_path: string; thumbnail_path: string | null }[];
-    const uploads = db.prepare('SELECT id FROM upload_sessions WHERE user_id = ?').all(auth.user.id) as { id: string }[];
+    const uploads = db.prepare('SELECT id FROM upload_sessions WHERE user_id = ?').all(auth.user.id) as {
+      id: string;
+    }[];
     db.prepare('DELETE FROM users WHERE id = ?').run(auth.user.id); // các bảng con xóa theo ON DELETE CASCADE
     for (const up of uploads) fs.rmSync(path.join(ctx.config.uploadDir, up.id), { recursive: true, force: true });
-    for (const f of files)
-      for (const p of [f.storage_path, f.thumbnail_path]) if (p) fs.rmSync(p, { force: true });
+    for (const f of files) for (const p of [f.storage_path, f.thumbnail_path]) if (p) fs.rmSync(p, { force: true });
     return ok(null);
   });
 
@@ -422,22 +439,28 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     let roomId: string | null = null;
     if (auth.user.role === 'controller') {
       roomId =
-        (db.prepare(`SELECT id FROM rooms WHERE owner_id = ? AND status = 'open'`).get(auth.user.id) as { id: string } | undefined)
-          ?.id ?? null;
+        (
+          db.prepare(`SELECT id FROM rooms WHERE owner_id = ? AND status = 'open'`).get(auth.user.id) as
+            { id: string } | undefined
+        )?.id ?? null;
     } else if (auth.device) {
       roomId =
         (
           db.prepare('SELECT room_id FROM room_members WHERE device_id = ? AND left_at IS NULL').get(auth.device.id) as
-            | { room_id: string }
-            | undefined
+            { room_id: string } | undefined
         )?.room_id ?? null;
     }
-    return ok({ user: profile(auth.user), account_role: auth.user.role, device: devicePayload(auth.device), room_id: roomId });
+    return ok({
+      user: profile(auth.user),
+      account_role: auth.user.role,
+      device: devicePayload(auth.device),
+      room_id: roomId,
+    });
   });
 }
 
-/** Mật khẩu quá yếu, không được dùng. */
-export const LEAKED_DEFAULT_PASSWORD = '12345678';
+/** Mật khẩu quá dễ đoán, không cho dùng với tài khoản Controller. */
+export const WEAK_PASSWORDS = ['123456', '12345678', 'password', 'controller', 'Controller123', 'admin123'];
 
 export function randomPassword(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -447,21 +470,22 @@ export function randomPassword(): string {
 export interface ControllerStatus {
   status: 'created' | 'exists';
   email: string;
-  /** Mật khẩu vừa sinh ngẫu nhiên (khi .env để trống hoặc còn mật khẩu mẫu) */
+  /** Mật khẩu vừa sinh ngẫu nhiên (khi .env để trống hoặc quá yếu) */
   generated?: string;
-  /** Đang dùng mật khẩu quá yếu */
-  leaked: boolean;
+  /** Đang dùng mật khẩu nằm trong danh sách dễ đoán */
+  weak: boolean;
 }
 
 /** Tạo tài khoản Controller duy nhất nếu chưa có (do nhà phát hành cấp sẵn). */
 export async function ensureController(ctx: Ctx): Promise<ControllerStatus> {
   const existing = ctx.db.prepare(`SELECT email, password_hash FROM users WHERE role = 'controller'`).get() as
-    | { email: string; password_hash: string }
-    | undefined;
-  if (existing)
-    return { status: 'exists', email: existing.email, leaked: await verifyPassword(LEAKED_DEFAULT_PASSWORD, existing.password_hash) };
+    { email: string; password_hash: string } | undefined;
+  if (existing) {
+    const checks = await Promise.all(WEAK_PASSWORDS.map((p) => verifyPassword(p, existing.password_hash)));
+    return { status: 'exists', email: existing.email, weak: checks.includes(true) };
+  }
   const c = { ...ctx.config.controller };
-  const generated = c.password && c.password !== LEAKED_DEFAULT_PASSWORD ? undefined : randomPassword();
+  const generated = c.password && !WEAK_PASSWORDS.includes(c.password) ? undefined : randomPassword();
   if (generated) c.password = generated;
   const now = ctx.now();
   ctx.db
@@ -470,6 +494,5 @@ export async function ensureController(ctx: Ctx): Promise<ControllerStatus> {
        VALUES (?, ?, ?, ?, ?, ?, 'controller', 1, ?, ?)`,
     )
     .run(newId('u', 8), c.firstName, c.lastName, c.email, c.phone, await hashPassword(c.password), now, now);
-  return { status: 'created', email: c.email, generated, leaked: false };
+  return { status: 'created', email: c.email, generated, weak: false };
 }
-

@@ -1,9 +1,9 @@
-// Các điểm đề bài quy định cụ thể + các lỗ hổng đã vá
+// Kiểm tra theo đặc tả và một số tình huống bảo mật
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { ensureController, LEAKED_DEFAULT_PASSWORD } from '../src/modules/auth.ts';
+import { ensureController, WEAK_PASSWORDS } from '../src/modules/auth.ts';
 import { signJwt } from '../src/lib/jwt.ts';
 import { hashPassword } from '../src/lib/security.ts';
 import { CONTROLLER, setup } from './helpers.ts';
@@ -21,20 +21,35 @@ test('access_token là JWT có claim acc; sửa claim hoặc ký bằng khóa kh
   const [h, p, s] = r.token.split('.');
   const forged = Buffer.from(JSON.stringify({ ...claimsOf(r.token), acc: 'controller' })).toString('base64url');
   assert.equal((await call('POST', '/rooms', {}, `${h}.${forged}.${s}`)).code, '9998');
-  assert.equal((await call('POST', '/rooms', {}, signJwt({ ...claimsOf(r.token), acc: 'controller' }, 'khoa-khac'))).code, '9998');
+  assert.equal(
+    (await call('POST', '/rooms', {}, signJwt({ ...claimsOf(r.token), acc: 'controller' }, 'khoa-khac'))).code,
+    '9998',
+  );
   // Đúng khóa nhưng không phải token của phiên nào trong CSDL
-  assert.equal((await call('POST', '/rooms', {}, signJwt({ ...claimsOf(r.token), acc: 'controller' }, ctx.config.mediaSecret))).code, '9998');
+  assert.equal(
+    (await call('POST', '/rooms', {}, signJwt({ ...claimsOf(r.token), acc: 'controller' }, ctx.config.mediaSecret)))
+      .code,
+    '9998',
+  );
   const none = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
   assert.equal((await call('GET', '/users/me', undefined, `${none}.${p}.`)).code, '9998');
   assert.equal((await call('POST', '/rooms', {}, r.token)).code, '1009');
 });
 
-test('refresh_token trả expires_in dạng chuỗi "3600" như đề bài; login trả số', async () => {
+test('refresh_token trả expires_in dạng chuỗi "3600"; login trả số', async () => {
   const { call, remote } = await setup();
   const r = await remote();
   assert.strictEqual((await call('POST', '/auth/refresh', { refresh_token: r.refresh })).data.expires_in, '3600');
   assert.strictEqual(
-    (await call('POST', '/auth/login', { email: r.email, password: 'abc123', device_id: 'x', device_type: 1, device_name: 'p' })).data.expires_in,
+    (
+      await call('POST', '/auth/login', {
+        email: r.email,
+        password: 'abc123',
+        device_id: 'x',
+        device_type: 1,
+        device_name: 'p',
+      })
+    ).data.expires_in,
     3600,
   );
 });
@@ -47,7 +62,11 @@ test('mã đặt lại mật khẩu của Controller KHÔNG trả qua API, chỉ
   assert.equal(r.code, '1000');
   assert.equal('code_verify' in r.data, false);
   assert.match(shown[0], /^\d{6}$/);
-  const reset = await call('POST', '/auth/password/forgot', { email: CONTROLLER.email, code_verify: shown[0], new_password: 'MoiHoanToan1' });
+  const reset = await call('POST', '/auth/password/forgot', {
+    email: CONTROLLER.email,
+    code_verify: shown[0],
+    new_password: 'MoiHoanToan1',
+  });
   assert.equal(reset.code, '1000');
 });
 
@@ -64,14 +83,17 @@ test('có SMTP: mã gửi tới email; gửi lỗi và không trả mã → 1005
   const other = await remote();
   ctx.config.returnVerifyCode = false;
   ctx.sender = { send: async () => Promise.reject(new Error('smtp down')) };
-  assert.equal((await call('POST', '/auth/verify-code', { email: other.email, purpose: 'forgot_password' })).code, '1005');
+  assert.equal(
+    (await call('POST', '/auth/verify-code', { email: other.email, purpose: 'forgot_password' })).code,
+    '1005',
+  );
   ctx.sender = { send: async (m) => void sent.push(m) };
   const again = await call('POST', '/auth/verify-code', { email: other.email, purpose: 'forgot_password' });
   assert.equal(again.code, '1000');
   assert.equal('code_verify' in again.data, false);
 });
 
-test('đề bài 1003: battery_level dạng chuỗi là sai kiểu', async () => {
+test('1003: battery_level dạng chuỗi là sai kiểu', async () => {
   const { call, remote } = await setup();
   const r = await remote();
   const sync = (b: object) => call('POST', `/devices/${r.device.device_id}/sync`, b, r.token);
@@ -79,7 +101,7 @@ test('đề bài 1003: battery_level dạng chuỗi là sai kiểu', async () =>
   assert.equal((await sync({ battery_level: 87 })).code, '1000');
 });
 
-test('đề bài 9994: phòng chưa có máy nào', async () => {
+test('9994: phòng chưa có máy nào', async () => {
   const { call, controller } = await setup();
   const c = await controller();
   const room = (await call('POST', '/rooms', {}, c)).data;
@@ -102,13 +124,15 @@ test('giả X-Forwarded-For từ máy ngoài không né được giới hạn t�
   assert.equal(limited, 10);
 });
 
-test('mật khẩu Controller: để trống → sinh ngẫu nhiên; mật khẩu mẫu đã lộ → cảnh báo', async () => {
+test('mật khẩu Controller: để trống → sinh ngẫu nhiên; mật khẩu yếu → cảnh báo', async () => {
   const { ctx } = await setup();
-  assert.equal((await ensureController(ctx)).leaked, false);
-  ctx.db.prepare(`UPDATE users SET password_hash = ? WHERE role = 'controller'`).run(await hashPassword(LEAKED_DEFAULT_PASSWORD));
-  assert.equal((await ensureController(ctx)).leaked, true);
+  assert.equal((await ensureController(ctx)).weak, false);
+  ctx.db
+    .prepare(`UPDATE users SET password_hash = ? WHERE role = 'controller'`)
+    .run(await hashPassword(WEAK_PASSWORDS[0]));
+  assert.equal((await ensureController(ctx)).weak, true);
   ctx.db.prepare(`DELETE FROM users WHERE role = 'controller'`).run();
-  ctx.config.controller.password = LEAKED_DEFAULT_PASSWORD;
+  ctx.config.controller.password = WEAK_PASSWORDS[0];
   const made = await ensureController(ctx);
   assert.match(made.generated!, /^[A-Za-z0-9]{12}$/);
 });
@@ -124,13 +148,28 @@ async function liveUploader() {
       await t.app.inject({
         method: 'PUT',
         url: `/api/videos/uploads/${id}/chunks/${i}`,
-        headers: { authorization: `Bearer ${r.token}`, 'content-type': 'application/octet-stream', 'x-chunk-sha256': sha(body) },
+        headers: {
+          authorization: `Bearer ${r.token}`,
+          'content-type': 'application/octet-stream',
+          'x-chunk-sha256': sha(body),
+        },
         payload: body,
       })
     ).json();
-  const init = (uid = 'live-1') => t.call('POST', '/videos/uploads', { streaming: true, local_video_uid: uid, file_name: 'a.mp4', chunk_size: CHUNK }, r.token);
+  const init = (uid = 'live-1') =>
+    t.call(
+      'POST',
+      '/videos/uploads',
+      { streaming: true, local_video_uid: uid, file_name: 'a.mp4', chunk_size: CHUNK },
+      r.token,
+    );
   const complete = (id: string, file: Buffer, extra: object = {}) =>
-    t.call('POST', `/videos/uploads/${id}/complete`, { total_size: file.length, checksum_sha256: sha(file), duration_ms: 4000, ...extra }, r.token);
+    t.call(
+      'POST',
+      `/videos/uploads/${id}/complete`,
+      { total_size: file.length, checksum_sha256: sha(file), duration_ms: 4000, ...extra },
+      r.token,
+    );
   return { ...t, r, put, init, complete };
 }
 
@@ -150,11 +189,14 @@ test('streaming: gửi mảnh khi chưa biết kích thước; đầu file đổ
   assert.deepEqual(st.missing_chunks, [2]);
   const differing = [0, 1, 2].filter((i) => st.chunk_hashes[i] !== sha(final.subarray(i * CHUNK, (i + 1) * CHUNK)));
   assert.deepEqual(differing, [0, 2]); // mảnh 1 không phải gửi lại
-  for (const i of differing) assert.equal((await t.put(id, i, final.subarray(i * CHUNK, (i + 1) * CHUNK))).code, '1000');
+  for (const i of differing)
+    assert.equal((await t.put(id, i, final.subarray(i * CHUNK, (i + 1) * CHUNK))).code, '1000');
   const done = await t.complete(id, final);
   assert.equal(done.code, '1000');
   assert.equal(done.data.duration_ms, 4000);
-  const p = (t.ctx.db.prepare('SELECT storage_path AS p FROM videos WHERE id = ?').get(done.data.video_id) as { p: string }).p;
+  const p = (
+    t.ctx.db.prepare('SELECT storage_path AS p FROM videos WHERE id = ?').get(done.data.video_id) as { p: string }
+  ).p;
   assert.ok(fs.readFileSync(p).equals(final));
 });
 

@@ -24,7 +24,12 @@ export function SyncPlayer({ videos, onClose }: { videos: LibraryVideo[]; onClos
   const [tracks, setTracks] = useState<Track[]>(() =>
     videos
       .filter((v) => v.recorded_at_ms !== null)
-      .map((v) => ({ video: v, url: null, offset: (v.recorded_at_ms! - base) / 1000, duration: (v.duration_ms ?? 0) / 1000 })),
+      .map((v) => ({
+        video: v,
+        url: null,
+        offset: (v.recorded_at_ms! - base) / 1000,
+        duration: (v.duration_ms ?? 0) / 1000,
+      })),
   );
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -41,7 +46,10 @@ export function SyncPlayer({ videos, onClose }: { videos: LibraryVideo[]; onClos
       .catch((e) => setError(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet'));
   }, [videos]);
 
-  const now = () => (clock.current.playing ? clock.current.startT + (performance.now() - clock.current.startPerf) / 1000 : clock.current.startT);
+  const now = () =>
+    clock.current.playing
+      ? clock.current.startT + (performance.now() - clock.current.startPerf) / 1000
+      : clock.current.startT;
 
   /** Đưa mọi video về đúng vị trí của đồng hồ chung. */
   function align(t: number, hard = false) {
@@ -116,9 +124,19 @@ export function SyncPlayer({ videos, onClose }: { videos: LibraryVideo[]; onClos
         <div className="sync-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
           {tracks.map((tr, i) => {
             const local = time - tr.offset;
-            const state = local < 0 ? `Bắt đầu sau ${(-local).toFixed(1)} s` : local > tr.duration && tr.duration > 0 ? 'Đã kết thúc' : null;
+            const state =
+              local < 0
+                ? `Bắt đầu sau ${(-local).toFixed(1)} s`
+                : local > tr.duration && tr.duration > 0
+                  ? 'Đã kết thúc'
+                  : null;
             return (
-              <div key={tr.video.video_id} className={`sync-cell ${audio === i ? 'audio' : ''}`} onClick={() => setAudio(i)} title="Bấm để nghe tiếng góc này">
+              <div
+                key={tr.video.video_id}
+                className={`sync-cell ${audio === i ? 'audio' : ''}`}
+                onClick={() => setAudio(i)}
+                title="Bấm để nghe tiếng góc này"
+              >
                 {tr.url ? (
                   <video
                     ref={(el) => {
@@ -145,13 +163,22 @@ export function SyncPlayer({ videos, onClose }: { videos: LibraryVideo[]; onClos
           <button className="primary" onClick={playing ? pause : play} aria-label={playing ? 'Tạm dừng' : 'Phát'}>
             {playing ? '❚❚ Tạm dừng' : '▶ Phát'}
           </button>
-          <input type="range" min={0} max={total} step={0.05} value={time} onChange={(e) => seek(Number(e.target.value))} aria-label="Tua" />
+          <input
+            type="range"
+            min={0}
+            max={total}
+            step={0.05}
+            value={time}
+            onChange={(e) => seek(Number(e.target.value))}
+            aria-label="Tua"
+          />
           <span className="mono">
             {fmtClock(time)} / {fmtClock(total)}
           </span>
         </div>
         <p className="muted small">
-          Các góc được căn theo thời điểm bắt đầu quay thực tế (giờ server). Độ lệch so với góc sớm nhất hiện ở góc trên phải mỗi khung. Bấm vào một khung để nghe tiếng của góc đó; Space để phát/dừng.
+          Các góc được căn theo thời điểm bắt đầu quay thực tế (giờ server). Độ lệch so với góc sớm nhất hiện ở góc trên
+          phải mỗi khung. Bấm vào một khung để nghe tiếng của góc đó; Space để phát/dừng.
         </p>
       </div>
     </div>

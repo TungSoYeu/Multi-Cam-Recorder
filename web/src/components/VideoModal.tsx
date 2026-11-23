@@ -53,7 +53,13 @@ export function VideoModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal player-modal" role="dialog" aria-modal="true" aria-label={video.file_name} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal player-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={video.file_name}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="invite-head">
           <h3>{video.file_name}</h3>
           <button className="icon-btn small" onClick={onClose} title="Đóng">
@@ -62,7 +68,13 @@ export function VideoModal({
         </div>
         <div className="player-body">
           <div className="player-video">
-            {error ? <p className="error">{error}</p> : detail?.stream_url ? <video src={detail.stream_url} controls autoPlay playsInline /> : <p className="muted">Đang tải…</p>}
+            {error ? (
+              <p className="error">{error}</p>
+            ) : detail?.stream_url ? (
+              <video src={detail.stream_url} controls autoPlay playsInline />
+            ) : (
+              <p className="muted">Đang tải…</p>
+            )}
           </div>
           <dl className="player-info">
             {rows.map(([k, v]) => (

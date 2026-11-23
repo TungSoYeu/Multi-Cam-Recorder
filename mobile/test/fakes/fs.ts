@@ -5,7 +5,8 @@ import path from 'node:path';
 export const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-mobile-'));
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type Part = string | { p: string };
-const join = (parts: Part[]) => path.join(...parts.map((x) => (typeof x === 'string' ? x.replace(/^file:\/\//, '') : x.p)));
+const join = (parts: Part[]) =>
+  path.join(...parts.map((x) => (typeof x === 'string' ? x.replace(/^file:\/\//, '') : x.p)));
 
 export const FileMode = { ReadWrite: 'rw', ReadOnly: 'r' } as const;
 

@@ -111,7 +111,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
         free_storage_bytes: storage,
         resolution: cameraState.resolution,
         fps: cameraState.fps,
-        ...(up ? { uploads_pending: up.pending, ...(up.progress !== null ? { upload_progress: up.progress } : {}) } : {}),
+        ...(up
+          ? { uploads_pending: up.pending, ...(up.progress !== null ? { upload_progress: up.progress } : {}) }
+          : {}),
         ...(live !== null ? { live_uploaded_bytes: live } : {}),
         ...(sending.length ? { acks: sending } : {}),
       });
@@ -119,7 +121,8 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       intervalRef.current = d.interval_ms || 1000;
       const prev = roomRef.current;
       roomRef.current = d.room?.room_id ?? null;
-      if (prev && !d.room && (d.last_left_reason === 'kicked' || d.last_left_reason === 'closed')) setExitReason(d.last_left_reason);
+      if (prev && !d.room && (d.last_left_reason === 'kicked' || d.last_left_reason === 'closed'))
+        setExitReason(d.last_left_reason);
       if (!d.room) seen.current.clear();
       setRoom(d.room);
       setRecording(d.recording);

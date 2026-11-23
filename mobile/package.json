@@ -5,7 +5,6 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start --go",
-    "start:tunnel": "expo start --go --tunnel",
     "clear": "expo start --go --clear",
     "typecheck": "tsc --noEmit",
     "test": "node --no-warnings --import ./test/hooks.mjs --test test/video.test.ts"

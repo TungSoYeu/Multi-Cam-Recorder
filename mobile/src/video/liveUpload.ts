@@ -34,7 +34,10 @@ export function cameraFilesBefore(): Set<string> {
 function findNewFile(before: Set<string>): File | null {
   const d = cameraDir();
   if (!d.exists) return null;
-  return (d.list().find((f) => f instanceof File && !before.has(f.name) && /\.(mp4|mov)$/i.test(f.name)) as File | undefined) ?? null;
+  return (
+    (d.list().find((f) => f instanceof File && !before.has(f.name) && /\.(mp4|mov)$/i.test(f.name)) as
+      File | undefined) ?? null
+  );
 }
 
 export interface LiveUpload {
@@ -44,7 +47,13 @@ export interface LiveUpload {
 
 export function startLiveUpload(
   before: Set<string>,
-  meta: { id: string; startedAt: number; facing: CameraFacing; recordingSessionId: string | null; startedAtServerMs: number | null },
+  meta: {
+    id: string;
+    startedAt: number;
+    facing: CameraFacing;
+    recordingSessionId: string | null;
+    startedAtServerMs: number | null;
+  },
 ): LiveUpload {
   let stopping = false;
   let uploadId: string | null = null;

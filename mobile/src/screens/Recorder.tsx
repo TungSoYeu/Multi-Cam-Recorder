@@ -108,7 +108,12 @@ export function Recorder({
     setMessage(null);
     setRecording(true);
     // Chức năng 8: gửi dần lên server ngay trong lúc quay
-    const live = startLiveUpload(filesBefore, { id: clipId, startedAt: started, facing: facingAtStart, ...sessionMeta });
+    const live = startLiveUpload(filesBefore, {
+      id: clipId,
+      startedAt: started,
+      facing: facingAtStart,
+      ...sessionMeta,
+    });
     // iPhone: ép H.264 để file phát được trên mọi trình duyệt (HEVC không phát được trên Chrome/Windows)
     camera.current
       .recordAsync(Platform.OS === 'ios' ? { codec: 'avc1' } : {})
@@ -172,7 +177,8 @@ export function Recorder({
     controlled && granted
       ? async (cmd: DeviceCommand) => {
           const wait = clock.toLocal(cmd.execute_at_ms) - Date.now();
-          if (cmd.type === 'start_recording' && wait > 0) setMessage(`Bắt đầu quay sau ${Math.ceil(wait / 1000)} giây…`);
+          if (cmd.type === 'start_recording' && wait > 0)
+            setMessage(`Bắt đầu quay sau ${Math.ceil(wait / 1000)} giây…`);
           if (wait > 0) await sleep(Math.min(wait, 10_000));
           switch (cmd.type) {
             case 'start_recording':
@@ -206,11 +212,14 @@ export function Recorder({
     }
     if (r && !recordingRef.current && sessionRef.current !== r.recording_session_id) {
       const dueIn = clock.toLocal(r.started_at_ms + LATE_START_GRACE_MS) - Date.now();
-      const t = setTimeout(() => {
-        if (!recordingRef.current && sessionRef.current !== r.recording_session_id) {
-          waitReady().then((ok) => ok && begin(r.recording_session_id));
-        }
-      }, Math.max(0, dueIn));
+      const t = setTimeout(
+        () => {
+          if (!recordingRef.current && sessionRef.current !== r.recording_session_id) {
+            waitReady().then((ok) => ok && begin(r.recording_session_id));
+          }
+        },
+        Math.max(0, dueIn),
+      );
       return () => clearTimeout(t);
     }
     if (!r && recordingRef.current && sessionRef.current) end();
@@ -222,7 +231,9 @@ export function Recorder({
       <View style={[st.fill, st.center]}>
         {banner}
         <Text style={st.permTitle}>Cần quyền camera và micro</Text>
-        <Text style={st.permText}>Ứng dụng cần camera và micro để quay video có tiếng{controlled ? ' khi Controller ra lệnh' : ''}.</Text>
+        <Text style={st.permText}>
+          Ứng dụng cần camera và micro để quay video có tiếng{controlled ? ' khi Controller ra lệnh' : ''}.
+        </Text>
         <Button
           title="Cấp quyền"
           onPress={async () => {
@@ -238,7 +249,9 @@ export function Recorder({
     );
   }
 
-  const idleHint = controlled ? 'Chờ lệnh quay từ Controller' : `${qualityLabel(quality)} · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`;
+  const idleHint = controlled
+    ? 'Chờ lệnh quay từ Controller'
+    : `${qualityLabel(quality)} · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`;
   return (
     <View style={st.fill}>
       <CameraView
@@ -259,7 +272,7 @@ export function Recorder({
             <Text style={st.recText}>{formatDuration(elapsed)}</Text>
           </View>
         ) : (
-          <Text style={st.hint}>{saving ? 'Đang lưu…' : message ?? idleHint}</Text>
+          <Text style={st.hint}>{saving ? 'Đang lưu…' : (message ?? idleHint)}</Text>
         )}
       </View>
       <View style={st.controls}>
@@ -296,14 +309,53 @@ const st = StyleSheet.create({
   permText: { color: colors.muted, textAlign: 'center', marginTop: 8, lineHeight: 20 },
   top: { position: 'absolute', top: 12, left: 12, right: 12 },
   status: { position: 'absolute', bottom: 132, left: 0, right: 0, alignItems: 'center' },
-  hint: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, overflow: 'hidden', fontSize: 13 },
-  recPill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  hint: {
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    overflow: 'hidden',
+    fontSize: 13,
+  },
+  recPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
   recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger },
   recText: { color: '#fff', fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  controls: { position: 'absolute', bottom: 24, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
+  controls: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
   side: { width: 90, alignItems: 'center' },
-  shutter: { width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  shutter: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 4,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   recCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.danger },
   stopSquare: { width: 30, height: 30, borderRadius: 6, backgroundColor: colors.danger },
-  roundBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  roundBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

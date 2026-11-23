@@ -49,8 +49,14 @@ test('join_room: bắt buộc grant_control, đúng device, chữ thường vẫ
   const room = await call('POST', '/rooms', {}, c);
   const code = room.data.invite_code;
 
-  assert.equal((await call('POST', '/rooms/join', join(code, r.device, { grant_control: false }), r.token)).code, '1004');
-  assert.equal((await call('POST', '/rooms/join', join(code, r.device, { grant_control: undefined }), r.token)).code, '1002');
+  assert.equal(
+    (await call('POST', '/rooms/join', join(code, r.device, { grant_control: false }), r.token)).code,
+    '1004',
+  );
+  assert.equal(
+    (await call('POST', '/rooms/join', join(code, r.device, { grant_control: undefined }), r.token)).code,
+    '1002',
+  );
   assert.equal((await call('POST', '/rooms/join', join(code, { device_id: 'dv_other' }), r.token)).code, '1004');
   assert.equal((await call('POST', '/rooms/join', join('ABC', r.device), r.token)).code, '1004');
   assert.equal((await call('POST', '/rooms/join', join('ZZZZZZ', r.device), r.token)).code, '2001');

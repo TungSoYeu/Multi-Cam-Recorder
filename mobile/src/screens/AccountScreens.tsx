@@ -53,7 +53,8 @@ export function ServerScreen() {
       </Title>
       {servers.map((s) => {
         const on = s.url === chosen;
-        const dot = s.ms === undefined ? colors.muted : s.ms === null ? colors.danger : s.ms > 200 ? '#e5c33a' : colors.ok;
+        const dot =
+          s.ms === undefined ? colors.muted : s.ms === null ? colors.danger : s.ms > 200 ? '#e5c33a' : colors.ok;
         return (
           <Pressable
             key={s.url}
@@ -62,13 +63,24 @@ export function ServerScreen() {
               await setServerUrl(s.url);
               setChosen(s.url);
             }}
-            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: on ? colors.accent : colors.border, padding: 14, marginBottom: 10 }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: on ? colors.accent : colors.border,
+              padding: 14,
+              marginBottom: 10,
+            }}
           >
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>
                 {s.url.replace(/^https?:\/\//, '').replace(/\/api$/, '')}
               </Text>
-              <Text style={{ color: colors.muted, fontSize: 12 }}>{s.ms === undefined ? 'Đang đo…' : s.ms === null ? 'Không kết nối được' : `${s.ms} ms`}</Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>
+                {s.ms === undefined ? 'Đang đo…' : s.ms === null ? 'Không kết nối được' : `${s.ms} ms`}
+              </Text>
             </View>
             <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: dot }} />
           </Pressable>
@@ -103,7 +115,9 @@ export function ChangePasswordScreen() {
   async function submit() {
     const e = {
       current: current ? undefined : 'Nhập mật khẩu hiện tại',
-      next: passwordProblem(next, nav.session?.user.phone) ?? (next === current ? 'Mật khẩu mới phải khác mật khẩu cũ' : undefined),
+      next:
+        passwordProblem(next, nav.session?.user.phone) ??
+        (next === current ? 'Mật khẩu mới phải khác mật khẩu cũ' : undefined),
       confirm: confirm === next ? undefined : 'Mật khẩu nhập lại không khớp',
     };
     setErrors(e);
@@ -112,7 +126,9 @@ export function ChangePasswordScreen() {
     try {
       await api.changePassword({ password: current, new_password: next });
       await nav.reloadSession();
-      Alert.alert('Đã đổi mật khẩu', 'Các thiết bị khác đăng nhập tài khoản này đã bị đăng xuất.', [{ text: 'OK', onPress: nav.pop }]);
+      Alert.alert('Đã đổi mật khẩu', 'Các thiết bị khác đăng nhập tài khoản này đã bị đăng xuất.', [
+        { text: 'OK', onPress: nav.pop },
+      ]);
     } catch (err) {
       setErrors(errField(err) === 'password' ? { current: 'Mật khẩu hiện tại không đúng' } : { form: errText(err) });
     } finally {
@@ -124,7 +140,14 @@ export function ChangePasswordScreen() {
     <Screen>
       <Header title="Đổi mật khẩu" onBack={nav.pop} />
       <Field label="MẬT KHẨU HIỆN TẠI" secure value={current} onChangeText={setCurrent} error={errors.current} />
-      <Field label="MẬT KHẨU MỚI" placeholder="6–20 ký tự, chỉ chữ và số" secure value={next} onChangeText={setNext} error={errors.next} />
+      <Field
+        label="MẬT KHẨU MỚI"
+        placeholder="6–20 ký tự, chỉ chữ và số"
+        secure
+        value={next}
+        onChangeText={setNext}
+        error={errors.next}
+      />
       <Field label="XÁC NHẬN MẬT KHẨU MỚI" secure value={confirm} onChangeText={setConfirm} error={errors.confirm} />
       {errors.form ? <Banner text={errors.form} tone="error" /> : null}
       <Button title="Lưu thay đổi" onPress={submit} loading={busy} />

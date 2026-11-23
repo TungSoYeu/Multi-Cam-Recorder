@@ -22,15 +22,33 @@ async function uploader() {
     const res = await t.app.inject({
       method: 'PUT',
       url: `/api/videos/uploads/${uploadId}/chunks/${index}`,
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream', ...(hash ? { 'x-chunk-sha256': hash } : {}) },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/octet-stream',
+        ...(hash ? { 'x-chunk-sha256': hash } : {}),
+      },
       payload: body,
     });
     return res.json();
   };
   const init = (file: Buffer, extra: Record<string, unknown> = {}, token = r.token) =>
-    t.call('POST', '/videos/uploads', { local_video_uid: 'clip-1', file_name: 'VID_20261117_101500_001.mp4', total_size: file.length, checksum_sha256: sha(file), duration_ms: 8000, ...extra }, token);
+    t.call(
+      'POST',
+      '/videos/uploads',
+      {
+        local_video_uid: 'clip-1',
+        file_name: 'VID_20261117_101500_001.mp4',
+        total_size: file.length,
+        checksum_sha256: sha(file),
+        duration_ms: 8000,
+        ...extra,
+      },
+      token,
+    );
   const sendAll = async (uploadId: string, file: Buffer, skip: number[] = []) => {
-    for (let i = 0; i * CHUNK < file.length; i++) if (!skip.includes(i)) assert.equal((await put(uploadId, i, file.subarray(i * CHUNK, (i + 1) * CHUNK))).code, '1000');
+    for (let i = 0; i * CHUNK < file.length; i++)
+      if (!skip.includes(i))
+        assert.equal((await put(uploadId, i, file.subarray(i * CHUNK, (i + 1) * CHUNK))).code, '1000');
   };
   return { ...t, r, put, init, sendAll };
 }
@@ -63,13 +81,18 @@ test('upload đầy đủ: init → các mảnh → status → complete → vide
   assert.equal(done.data.size_bytes, file.length);
   assert.equal(done.data.checksum_sha256, sha(file));
   assert.equal(done.data.duration_ms, 8000);
-  const row = ctx.db.prepare('SELECT storage_path FROM videos WHERE id = ?').get(done.data.video_id) as { storage_path: string };
+  const row = ctx.db.prepare('SELECT storage_path FROM videos WHERE id = ?').get(done.data.video_id) as {
+    storage_path: string;
+  };
   assert.ok(fs.readFileSync(row.storage_path).equals(file));
   // Mảnh tạm đã được dọn
   assert.equal(fs.existsSync(path.join(ctx.config.uploadDir, up.data.upload_id)), false);
 
   // complete lại → trả cùng video; init lại cùng clip → 3005
-  assert.equal((await call('POST', `/videos/uploads/${up.data.upload_id}/complete`, {}, r.token)).data.video_id, done.data.video_id);
+  assert.equal(
+    (await call('POST', `/videos/uploads/${up.data.upload_id}/complete`, {}, r.token)).data.video_id,
+    done.data.video_id,
+  );
   const again = await init(file);
   assert.equal(again.code, '3005');
   assert.equal(again.data.video_id, done.data.video_id);
@@ -131,7 +154,9 @@ test('không truy cập được phiên upload của người khác (3001)', asy
 test('vượt hạn mức lưu trữ → 3004 (tính cả phiên đang upload)', async () => {
   const { init, ctx, r } = await uploader();
   const file = fakeVideo();
-  const uid = (ctx.db.prepare('SELECT user_id FROM devices WHERE id = ?').get(r.device.device_id) as { user_id: string }).user_id;
+  const uid = (
+    ctx.db.prepare('SELECT user_id FROM devices WHERE id = ?').get(r.device.device_id) as { user_id: string }
+  ).user_id;
   ctx.db.prepare('UPDATE users SET storage_quota_bytes = ? WHERE id = ?').run(file.length * 1.5, uid);
   assert.equal((await init(file)).code, '1000');
   assert.equal((await init(fakeVideo(), { local_video_uid: 'clip-2' })).code, '3004');
@@ -153,13 +178,24 @@ test('clip của phiên quay đồng bộ gắn với phòng; Controller thấy 
   const t = await uploader();
   const c = await t.controller();
   const room = (await t.call('POST', '/rooms', {}, c)).data;
-  await t.call('POST', '/rooms/join', { invite_code: room.invite_code, device_id: t.r.device.device_id, camera_name: 'Cam 1', grant_control: true }, t.r.token);
-  const rs = (await t.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: 'a' }, c)).data.recording_session_id;
+  await t.call(
+    'POST',
+    '/rooms/join',
+    { invite_code: room.invite_code, device_id: t.r.device.device_id, camera_name: 'Cam 1', grant_control: true },
+    t.r.token,
+  );
+  const rs = (await t.call('POST', `/rooms/${room.room_id}/recording/start`, { client_command_id: 'a' }, c)).data
+    .recording_session_id;
 
   assert.equal((await t.init(fakeVideo(), { recording_session_id: 'rs_khongtontai' })).code, '1004');
   const file = fakeVideo();
   const up = await t.init(file, { recording_session_id: rs, recorded_at_ms: 123 });
-  await t.call('POST', `/devices/${t.r.device.device_id}/sync`, { camera_facing: 'back', is_recording: false, uploads_pending: 1, upload_progress: 40 }, t.r.token);
+  await t.call(
+    'POST',
+    `/devices/${t.r.device.device_id}/sync`,
+    { camera_facing: 'back', is_recording: false, uploads_pending: 1, upload_progress: 40 },
+    t.r.token,
+  );
   let view = await t.call('GET', `/rooms/${room.room_id}/sync`, undefined, c);
   assert.equal(view.data.members[0].state.uploads_pending, 1);
   assert.equal(view.data.members[0].state.upload_progress, 40);
@@ -167,7 +203,12 @@ test('clip của phiên quay đồng bộ gắn với phòng; Controller thấy 
 
   await t.sendAll(up.data.upload_id, file);
   const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), crypto.randomBytes(200)]).toString('base64');
-  const done = await t.call('POST', `/videos/uploads/${up.data.upload_id}/complete`, { thumbnail_base64: jpg }, t.r.token);
+  const done = await t.call(
+    'POST',
+    `/videos/uploads/${up.data.upload_id}/complete`,
+    { thumbnail_base64: jpg },
+    t.r.token,
+  );
   assert.equal(done.data.room_id, room.room_id);
   assert.equal(done.data.recording_session_id, rs);
   assert.equal(done.data.has_thumbnail, '1');
@@ -181,7 +222,8 @@ test('xóa tài khoản xóa luôn file video trên đĩa', async () => {
   const id = (await init(file)).data.upload_id;
   await sendAll(id, file);
   const vd = (await call('POST', `/videos/uploads/${id}/complete`, {}, r.token)).data.video_id;
-  const p = (ctx.db.prepare('SELECT storage_path FROM videos WHERE id = ?').get(vd) as { storage_path: string }).storage_path;
+  const p = (ctx.db.prepare('SELECT storage_path FROM videos WHERE id = ?').get(vd) as { storage_path: string })
+    .storage_path;
   assert.ok(fs.existsSync(p));
   assert.equal((await call('DELETE', '/users/me', { password: 'abc123' }, r.token)).code, '1000');
   assert.equal(fs.existsSync(p), false);

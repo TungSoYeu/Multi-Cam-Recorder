@@ -83,13 +83,17 @@ const partsDir = (ctx: Ctx, uploadId: string) => path.join(ctx.config.uploadDir,
 const partFile = (ctx: Ctx, uploadId: string, index: number) => path.join(partsDir(ctx, uploadId), `${index}.part`);
 
 function receivedIndexes(ctx: Ctx, uploadId: string): number[] {
-  return (ctx.db.prepare('SELECT chunk_index FROM upload_chunks WHERE upload_id = ? ORDER BY chunk_index').all(uploadId) as {
-    chunk_index: number;
-  }[]).map((r) => r.chunk_index);
+  return (
+    ctx.db.prepare('SELECT chunk_index FROM upload_chunks WHERE upload_id = ? ORDER BY chunk_index').all(uploadId) as {
+      chunk_index: number;
+    }[]
+  ).map((r) => r.chunk_index);
 }
 
 function statusPayload(ctx: Ctx, u: UploadRow) {
-  const rows = ctx.db.prepare('SELECT chunk_index, checksum_sha256 FROM upload_chunks WHERE upload_id = ? ORDER BY chunk_index').all(u.id) as {
+  const rows = ctx.db
+    .prepare('SELECT chunk_index, checksum_sha256 FROM upload_chunks WHERE upload_id = ? ORDER BY chunk_index')
+    .all(u.id) as {
     chunk_index: number;
     checksum_sha256: string;
   }[];
@@ -119,16 +123,27 @@ function ownedUpload(ctx: Ctx, auth: Auth, uploadId: string, allowFinished = fal
     : undefined;
   if (!u || u.user_id !== auth.user.id) return fail(Codes.UPLOAD_SESSION_NOT_FOUND);
   if (u.status === 'aborted') return fail(Codes.UPLOAD_SESSION_NOT_FOUND);
-  if (u.status === 'completed') return allowFinished ? u : fail(Codes.UPLOAD_SESSION_NOT_FOUND, 'Upload already completed', { video_id: u.video_id });
+  if (u.status === 'completed')
+    return allowFinished
+      ? u
+      : fail(Codes.UPLOAD_SESSION_NOT_FOUND, 'Upload already completed', { video_id: u.video_id });
   if (u.expires_at <= ctx.now()) return fail(Codes.UPLOAD_SESSION_NOT_FOUND, 'Upload session expired');
   return u;
 }
 
 const safeFileName = (s: string) =>
-  s.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'video.mp4';
+  s
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120) || 'video.mp4';
 
 function usedBytes(ctx: Ctx, userId: string, excludeUpload?: string) {
-  const videos = (ctx.db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos WHERE owner_user_id = ?').get(userId) as { n: number }).n;
+  const videos = (
+    ctx.db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos WHERE owner_user_id = ?').get(userId) as {
+      n: number;
+    }
+  ).n;
   const pending = (
     ctx.db
       .prepare(
@@ -141,7 +156,6 @@ function usedBytes(ctx: Ctx, userId: string, excludeUpload?: string) {
   ).n;
   return videos + pending;
 }
-
 
 /** Hủy phiên upload quá hạn và xóa mảnh tạm. Gọi định kỳ. */
 export function cleanupExpiredUploads(ctx: Ctx) {
@@ -161,8 +175,10 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
   const { db, config } = ctx;
 
   // Body nhị phân cho upload_chunk
-  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: config.maxChunkBytes + 1024 }, (_req, body, done) =>
-    done(null, body),
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer', bodyLimit: config.maxChunkBytes + 1024 },
+    (_req, body, done) => done(null, body),
   );
 
   // 20. init_upload — mở phiên upload (hoặc tiếp tục phiên cũ cùng clip)
@@ -180,9 +196,11 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
     const durationMs = v.optInt(b, 'duration_ms', 0, 24 * 3600 * 1000) ?? null;
     const recordedAt = v.optInt(b, 'recorded_at_ms', 0, Number.MAX_SAFE_INTEGER) ?? null;
     const facing = v.optStr(b, 'camera_facing', { max: 5 }) ?? null;
-    if (facing && facing !== 'front' && facing !== 'back') fail(Codes.PARAM_VALUE_INVALID, 'Invalid camera_facing', { field: 'camera_facing' });
+    if (facing && facing !== 'front' && facing !== 'back')
+      fail(Codes.PARAM_VALUE_INVALID, 'Invalid camera_facing', { field: 'camera_facing' });
     const mime = v.optStr(b, 'mime_type', { max: 40 }) ?? 'video/mp4';
-    if (!/^video\/(mp4|quicktime)$/.test(mime)) fail(Codes.PARAM_VALUE_INVALID, 'Invalid mime_type', { field: 'mime_type' });
+    if (!/^video\/(mp4|quicktime)$/.test(mime))
+      fail(Codes.PARAM_VALUE_INVALID, 'Invalid mime_type', { field: 'mime_type' });
     if (totalSize > config.maxVideoBytes) fail(Codes.FILE_TOO_BIG, undefined, { max_bytes: config.maxVideoBytes });
 
     // Phiên quay đồng bộ: phải là phòng mà thiết bị này từng tham gia
@@ -204,7 +222,8 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
       const existing = db
         .prepare('SELECT id FROM videos WHERE local_video_uid = ? AND checksum_sha256 = ? AND owner_user_id = ?')
         .get(localUid, checksum, auth.user.id) as { id: string } | undefined;
-      if (existing) throw new ApiError(Codes.VIDEO_ALREADY_UPLOADED, undefined, { video_id: existing.id, already_uploaded: '1' });
+      if (existing)
+        throw new ApiError(Codes.VIDEO_ALREADY_UPLOADED, undefined, { video_id: existing.id, already_uploaded: '1' });
 
       const resume = db
         .prepare(
@@ -214,10 +233,21 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
         .get(auth.user.id, localUid, checksum, now) as UploadRow | undefined;
       if (resume) return resume;
 
-      const quota = (db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(auth.user.id) as { q: number }).q;
-      if (usedBytes(ctx, auth.user.id) + totalSize > quota) fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
+      const quota = (
+        db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(auth.user.id) as { q: number }
+      ).q;
+      if (usedBytes(ctx, auth.user.id) + totalSize > quota)
+        fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
 
-      const meta: UploadMeta = { streaming, duration_ms: durationMs, recording_session_id: sessionId, room_id: roomId, camera_facing: facing as UploadMeta['camera_facing'], recorded_at_ms: recordedAt, mime_type: mime };
+      const meta: UploadMeta = {
+        streaming,
+        duration_ms: durationMs,
+        recording_session_id: sessionId,
+        room_id: roomId,
+        camera_facing: facing as UploadMeta['camera_facing'],
+        recorded_at_ms: recordedAt,
+        mime_type: mime,
+      };
       const row: UploadRow = {
         id: newId('up', 10),
         user_id: auth.user.id,
@@ -238,7 +268,21 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
         `INSERT INTO upload_sessions (id, user_id, device_id, local_video_uid, file_name, total_size, chunk_size, total_chunks,
            checksum_sha256, status, expires_at, created_at, updated_at, meta)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?)`,
-      ).run(row.id, row.user_id, row.device_id, row.local_video_uid, row.file_name, row.total_size, row.chunk_size, row.total_chunks, row.checksum_sha256, row.expires_at, now, now, row.meta);
+      ).run(
+        row.id,
+        row.user_id,
+        row.device_id,
+        row.local_video_uid,
+        row.file_name,
+        row.total_size,
+        row.chunk_size,
+        row.total_chunks,
+        row.checksum_sha256,
+        row.expires_at,
+        now,
+        now,
+        row.meta,
+      );
       return row;
     });
     return ok(statusPayload(ctx, result));
@@ -255,16 +299,23 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
       const index = Number(req.params.index);
       const body = req.body;
       const open = isOpenStream(u);
-      if (!open && index >= u.total_chunks) fail(Codes.PARAM_VALUE_INVALID, 'Chunk index out of range', { field: 'index' });
+      if (!open && index >= u.total_chunks)
+        fail(Codes.PARAM_VALUE_INVALID, 'Chunk index out of range', { field: 'index' });
       if (!Buffer.isBuffer(body)) return fail(Codes.PARAM_TYPE_INVALID, 'Body must be application/octet-stream');
       if (open) {
-        if (body.length === 0 || body.length > u.chunk_size) fail(Codes.PARAM_VALUE_INVALID, 'Invalid chunk size', { field: 'body' });
-        if (index * u.chunk_size + body.length > config.maxVideoBytes) fail(Codes.FILE_TOO_BIG, undefined, { max_bytes: config.maxVideoBytes });
-        const quota = (db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(auth.user.id) as { q: number }).q;
-        if (usedBytes(ctx, auth.user.id) + body.length > quota) fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
+        if (body.length === 0 || body.length > u.chunk_size)
+          fail(Codes.PARAM_VALUE_INVALID, 'Invalid chunk size', { field: 'body' });
+        if (index * u.chunk_size + body.length > config.maxVideoBytes)
+          fail(Codes.FILE_TOO_BIG, undefined, { max_bytes: config.maxVideoBytes });
+        const quota = (
+          db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(auth.user.id) as { q: number }
+        ).q;
+        if (usedBytes(ctx, auth.user.id) + body.length > quota)
+          fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
       } else {
         const expected = chunkSizeAt(u, index);
-        if (body.length !== expected) fail(Codes.PARAM_VALUE_INVALID, 'Invalid chunk size', { field: 'body', expected_size: expected });
+        if (body.length !== expected)
+          fail(Codes.PARAM_VALUE_INVALID, 'Invalid chunk size', { field: 'body', expected_size: expected });
       }
       const header = String(req.headers['x-chunk-sha256'] ?? '').toLowerCase();
       if (!header) fail(Codes.PARAM_NOT_ENOUGH, 'Missing X-Chunk-Sha256 header', { field: 'x-chunk-sha256' });
@@ -287,8 +338,14 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
            checksum_sha256 = excluded.checksum_sha256, received_at = excluded.received_at`,
       ).run(u.id, index, body.length, actual, now);
       // Còn hoạt động thì gia hạn phiên
-      db.prepare('UPDATE upload_sessions SET expires_at = ?, updated_at = ? WHERE id = ?').run(now + config.uploadTtlSec * 1000, now, u.id);
-      const received = (db.prepare('SELECT COUNT(*) AS n FROM upload_chunks WHERE upload_id = ?').get(u.id) as { n: number }).n;
+      db.prepare('UPDATE upload_sessions SET expires_at = ?, updated_at = ? WHERE id = ?').run(
+        now + config.uploadTtlSec * 1000,
+        now,
+        u.id,
+      );
+      const received = (
+        db.prepare('SELECT COUNT(*) AS n FROM upload_chunks WHERE upload_id = ?').get(u.id) as { n: number }
+      ).n;
       return ok({ upload_id: u.id, index, received_count: received, total_chunks: u.total_chunks });
     },
   );
@@ -327,7 +384,8 @@ const chunkSizeAt = (u: UploadRow, index: number) =>
 
 function sha256Param(b: v.Body): string {
   const checksum = v.str(b, 'checksum_sha256', { min: 64, max: 64 }).toLowerCase();
-  if (!SHA256_RE.test(checksum)) fail(Codes.PARAM_VALUE_INVALID, 'Invalid checksum_sha256', { field: 'checksum_sha256' });
+  if (!SHA256_RE.test(checksum))
+    fail(Codes.PARAM_VALUE_INVALID, 'Invalid checksum_sha256', { field: 'checksum_sha256' });
   return checksum;
 }
 
@@ -351,8 +409,10 @@ function sealStream(ctx: Ctx, u: UploadRow, b: v.Body): UploadRow {
     fs.rmSync(partsDir(ctx, u.id), { recursive: true, force: true });
     throw new ApiError(Codes.VIDEO_ALREADY_UPLOADED, undefined, { video_id: dup.id, already_uploaded: '1' });
   }
-  const quota = (db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(u.user_id) as { q: number }).q;
-  if (usedBytes(ctx, u.user_id, u.id) + totalSize > quota) fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
+  const quota = (db.prepare('SELECT storage_quota_bytes AS q FROM users WHERE id = ?').get(u.user_id) as { q: number })
+    .q;
+  if (usedBytes(ctx, u.user_id, u.id) + totalSize > quota)
+    fail(Codes.STORAGE_QUOTA_EXCEEDED, undefined, { quota_bytes: quota });
 
   const row: UploadRow = {
     ...u,
@@ -362,15 +422,13 @@ function sealStream(ctx: Ctx, u: UploadRow, b: v.Body): UploadRow {
     meta: JSON.stringify({ ...metaOf(u), duration_ms: durationMs }),
   };
   tx(db, () => {
-    db.prepare('UPDATE upload_sessions SET total_size = ?, total_chunks = ?, checksum_sha256 = ?, meta = ?, updated_at = ? WHERE id = ?').run(
-      row.total_size,
-      row.total_chunks,
-      row.checksum_sha256,
-      row.meta,
-      ctx.now(),
-      u.id,
-    );
-    const chunks = db.prepare('SELECT chunk_index, size_bytes FROM upload_chunks WHERE upload_id = ?').all(u.id) as { chunk_index: number; size_bytes: number }[];
+    db.prepare(
+      'UPDATE upload_sessions SET total_size = ?, total_chunks = ?, checksum_sha256 = ?, meta = ?, updated_at = ? WHERE id = ?',
+    ).run(row.total_size, row.total_chunks, row.checksum_sha256, row.meta, ctx.now(), u.id);
+    const chunks = db.prepare('SELECT chunk_index, size_bytes FROM upload_chunks WHERE upload_id = ?').all(u.id) as {
+      chunk_index: number;
+      size_bytes: number;
+    }[];
     for (const c of chunks)
       if (c.chunk_index >= row.total_chunks || c.size_bytes !== chunkSizeAt(row, c.chunk_index))
         db.prepare('DELETE FROM upload_chunks WHERE upload_id = ? AND chunk_index = ?').run(u.id, c.chunk_index);
@@ -385,7 +443,8 @@ async function finish(ctx: Ctx, u: UploadRow, thumbB64: string | undefined) {
   for (let i = 0; i < u.total_chunks; i++) if (!got.has(i) || !fs.existsSync(partFile(ctx, u.id, i))) missing.push(i);
   if (missing.length) {
     // Mảnh có trong DB nhưng mất file → xóa bản ghi để client gửi lại
-    for (const i of missing) db.prepare('DELETE FROM upload_chunks WHERE upload_id = ? AND chunk_index = ?').run(u.id, i);
+    for (const i of missing)
+      db.prepare('DELETE FROM upload_chunks WHERE upload_id = ? AND chunk_index = ?').run(u.id, i);
     fail(Codes.MISSING_CHUNKS, undefined, { missing_chunks: missing });
   }
 
@@ -463,15 +522,39 @@ async function finish(ctx: Ctx, u: UploadRow, thumbB64: string | undefined) {
       .prepare('SELECT * FROM videos WHERE local_video_uid = ? AND checksum_sha256 = ?')
       .get(u.local_video_uid, u.checksum_sha256) as VideoRow | undefined;
     if (existing) {
-      db.prepare(`UPDATE upload_sessions SET status = 'completed', video_id = ?, updated_at = ? WHERE id = ?`).run(existing.id, now, u.id);
+      db.prepare(`UPDATE upload_sessions SET status = 'completed', video_id = ?, updated_at = ? WHERE id = ?`).run(
+        existing.id,
+        now,
+        u.id,
+      );
       return existing;
     }
     db.prepare(
       `INSERT INTO videos (id, owner_user_id, device_id, room_id, recording_session_id, local_video_uid, file_name, mime_type,
          size_bytes, duration_ms, checksum_sha256, storage_path, thumbnail_path, recorded_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(row.id, row.owner_user_id, row.device_id, row.room_id, row.recording_session_id, row.local_video_uid, row.file_name, row.mime_type, row.size_bytes, row.duration_ms, row.checksum_sha256, row.storage_path, row.thumbnail_path, row.recorded_at, row.created_at);
-    db.prepare(`UPDATE upload_sessions SET status = 'completed', video_id = ?, updated_at = ? WHERE id = ?`).run(videoId, now, u.id);
+    ).run(
+      row.id,
+      row.owner_user_id,
+      row.device_id,
+      row.room_id,
+      row.recording_session_id,
+      row.local_video_uid,
+      row.file_name,
+      row.mime_type,
+      row.size_bytes,
+      row.duration_ms,
+      row.checksum_sha256,
+      row.storage_path,
+      row.thumbnail_path,
+      row.recorded_at,
+      row.created_at,
+    );
+    db.prepare(`UPDATE upload_sessions SET status = 'completed', video_id = ?, updated_at = ? WHERE id = ?`).run(
+      videoId,
+      now,
+      u.id,
+    );
     return null;
   });
   fs.rmSync(partsDir(ctx, u.id), { recursive: true, force: true });

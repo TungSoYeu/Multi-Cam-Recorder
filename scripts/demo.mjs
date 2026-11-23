@@ -48,7 +48,7 @@ const portFree = (port) =>
   });
 
 async function healthy(base, timeoutMs) {
-  for (const end = Date.now() + timeoutMs; Date.now() < end; ) {
+  for (const end = Date.now() + timeoutMs; Date.now() < end;) {
     try {
       const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(4000) });
       if ((await r.json()).code === '1000') return true;
@@ -64,9 +64,13 @@ async function healthy(base, timeoutMs) {
 function lanIp() {
   if (process.env.LAN_IP) return process.env.LAN_IP;
   const all = Object.entries(os.networkInterfaces()).flatMap(([name, list]) =>
-    (list ?? []).filter((i) => i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => ({ name, ip: i.address })),
+    (list ?? [])
+      .filter((i) => i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.'))
+      .map((i) => ({ name, ip: i.address })),
   );
-  const real = all.filter((x) => !/vethernet|virtualbox|vmware|hyper-v|wsl|docker|tailscale|zerotier|radmin/i.test(x.name));
+  const real = all.filter(
+    (x) => !/vethernet|virtualbox|vmware|hyper-v|wsl|docker|tailscale|zerotier|radmin/i.test(x.name),
+  );
   const list = real.length ? real : all;
   return (list.find((x) => /wi-?fi|wlan|wireless/i.test(x.name)) ?? list[0])?.ip ?? null;
 }
@@ -78,7 +82,9 @@ function findCloudflared() {
     'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe',
     'C:\\Program Files\\cloudflared\\cloudflared.exe',
   ].filter(Boolean);
-  return candidates.find((c) => c.endsWith('.mjs') || spawnSync(c, ['--version'], { stdio: 'ignore', windowsHide: true }).status === 0);
+  return candidates.find(
+    (c) => c.endsWith('.mjs') || spawnSync(c, ['--version'], { stdio: 'ignore', windowsHide: true }).status === 0,
+  );
 }
 
 function openTunnel(bin, port) {
@@ -102,16 +108,21 @@ if (maj < 24 || (maj === 24 && min < 3)) die(`cần Node 24.3 trở lên, máy �
 if (!fs.existsSync(path.join(root, 'node_modules', 'fastify'))) die('chưa cài thư viện. Chạy: npm install');
 const envFile = path.join(root, 'server', '.env');
 if (!fs.existsSync(envFile)) fs.copyFileSync(path.join(root, 'server', '.env.example'), envFile);
-for (const p of [PORT, METRO]) if (!(await portFree(p))) die(`cổng ${p} đang bị chiếm. Tắt server/Metro cũ (Ctrl+C ở terminal cũ) rồi chạy lại.`);
+for (const p of [PORT, METRO])
+  if (!(await portFree(p))) die(`cổng ${p} đang bị chiếm. Tắt server/Metro cũ (Ctrl+C ở terminal cũ) rồi chạy lại.`);
 const cf = tunnel ? findCloudflared() : null;
 if (tunnel && !cf) die('chưa có cloudflared. Cài: winget install --id Cloudflare.cloudflared (rồi mở terminal mới)');
 
 // ---------- 2. Build web + server ----------
 console.log('  [1/4] Build giao diện Controller…');
-const build = spawnSync(process.execPath, [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--logLevel', 'error'], {
-  cwd: path.join(root, 'web'),
-  stdio: 'inherit',
-});
+const build = spawnSync(
+  process.execPath,
+  [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--logLevel', 'error'],
+  {
+    cwd: path.join(root, 'web'),
+    stdio: 'inherit',
+  },
+);
 if (build.status !== 0) die('build web thất bại');
 
 console.log('  [2/4] Chạy server…');
@@ -132,7 +143,8 @@ if (tunnel) {
   if (!api || !metro) die('không mở được tunnel (kiểm tra Internet của laptop)');
   publicBase = api;
   metroEnv.EXPO_PACKAGER_PROXY_URL = metro;
-  if (!(await healthy(api, 60_000))) console.warn('  CẢNH BÁO: chưa gọi được server qua tunnel, thường do DNS chậm — đợi thêm 1 phút.');
+  if (!(await healthy(api, 60_000)))
+    console.warn('  CẢNH BÁO: chưa gọi được server qua tunnel, thường do DNS chậm — đợi thêm 1 phút.');
 } else {
   const ip = lanIp();
   if (!ip) die('laptop chưa nối mạng nào');
@@ -155,9 +167,13 @@ console.log(`
 
 // ---------- 4. Metro ----------
 console.log('  [4/4] Chạy Metro…');
-const metro = run(process.execPath, [path.join(root, 'node_modules', 'expo', 'bin', 'cli'), 'start', '--go', '--clear', '--port', String(METRO)], {
-  cwd: path.join(root, 'mobile'),
-  stdio: 'inherit',
-  env: metroEnv,
-});
+const metro = run(
+  process.execPath,
+  [path.join(root, 'node_modules', 'expo', 'bin', 'cli'), 'start', '--go', '--clear', '--port', String(METRO)],
+  {
+    cwd: path.join(root, 'mobile'),
+    stdio: 'inherit',
+    env: metroEnv,
+  },
+);
 metro.on('exit', () => stop(0));

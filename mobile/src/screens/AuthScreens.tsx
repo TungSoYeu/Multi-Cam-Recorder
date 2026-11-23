@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  ApiError,
-  EMAIL_RE,
-  PHONE_RE,
-  passwordProblem,
-  type Identifier,
-  type VerifyPurpose,
-} from '@multicam/shared';
+import { ApiError, EMAIL_RE, PHONE_RE, passwordProblem, type Identifier, type VerifyPurpose } from '@multicam/shared';
 import { api, deviceInfo, getServerUrl, onServerChange } from '../api';
 import { Banner, Button, CodeInput, Field, Header, Link, Screen, Title } from '../components/ui';
 import { errField, errText, identText, toIdent, useNav } from '../nav';
@@ -20,7 +13,11 @@ async function requestCode(ident: Identifier, purpose: VerifyPurpose) {
     return { masked: d.masked_target, devCode: d.code_verify, retryAfter: d.resend_after };
   } catch (e) {
     if (e instanceof ApiError && e.code === '1012')
-      return { masked: undefined, devCode: undefined, retryAfter: (e.data as { retry_after?: number })?.retry_after ?? 120 };
+      return {
+        masked: undefined,
+        devCode: undefined,
+        retryAfter: (e.data as { retry_after?: number })?.retry_after ?? 120,
+      };
     throw e;
   }
 }
@@ -140,14 +137,26 @@ export function SignupScreen() {
     if (Object.keys(e).length) return;
     setBusy(true);
     try {
-      await api.signup({ first_name: f.first_name.trim(), last_name: f.last_name.trim(), email, phone, password: f.password });
+      await api.signup({
+        first_name: f.first_name.trim(),
+        last_name: f.last_name.trim(),
+        email,
+        phone,
+        password: f.password,
+      });
       const ident = { email };
-      const r = await requestCode(ident, 'signup').catch(() => ({ masked: undefined, devCode: undefined, retryAfter: 0 }));
+      const r = await requestCode(ident, 'signup').catch(() => ({
+        masked: undefined,
+        devCode: undefined,
+        retryAfter: 0,
+      }));
       nav.push({ name: 'verify', ident, purpose: 'signup', ...r });
     } catch (err) {
       const field = errField(err);
       if (err instanceof ApiError && err.code === '9996')
-        setErrors({ [field ?? 'email']: field === 'phone' ? 'Số điện thoại đã được đăng ký' : 'Email đã được đăng ký' });
+        setErrors({
+          [field ?? 'email']: field === 'phone' ? 'Số điện thoại đã được đăng ký' : 'Email đã được đăng ký',
+        });
       else if (field) setErrors({ [field]: errText(err) });
       else setErrors({ form: errText(err) });
     } finally {
@@ -161,16 +170,60 @@ export function SignupScreen() {
       <Text style={s.note}>Tài khoản đăng ký sẽ hoạt động ở vai trò Remote Camera.</Text>
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <Field label="HỌ" placeholder="Nguyễn" value={f.last_name} onChangeText={set('last_name')} autoCapitalize="words" error={errors.last_name} />
+          <Field
+            label="HỌ"
+            placeholder="Nguyễn"
+            value={f.last_name}
+            onChangeText={set('last_name')}
+            autoCapitalize="words"
+            error={errors.last_name}
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="TÊN" placeholder="Văn A" value={f.first_name} onChangeText={set('first_name')} autoCapitalize="words" error={errors.first_name} />
+          <Field
+            label="TÊN"
+            placeholder="Văn A"
+            value={f.first_name}
+            onChangeText={set('first_name')}
+            autoCapitalize="words"
+            error={errors.first_name}
+          />
         </View>
       </View>
-      <Field label="SỐ ĐIỆN THOẠI" placeholder="09xxxxxxxx" keyboardType="phone-pad" value={f.phone} onChangeText={set('phone')} maxLength={10} error={errors.phone} />
-      <Field label="EMAIL" placeholder="email@example.com" keyboardType="email-address" value={f.email} onChangeText={set('email')} error={errors.email} />
-      <Field label="MẬT KHẨU" placeholder="6–20 ký tự, chỉ chữ và số" secure value={f.password} onChangeText={set('password')} textContentType="newPassword" error={errors.password} />
-      <Field label="XÁC NHẬN MẬT KHẨU" placeholder="Nhập lại mật khẩu" secure value={f.confirm} onChangeText={set('confirm')} error={errors.confirm} />
+      <Field
+        label="SỐ ĐIỆN THOẠI"
+        placeholder="09xxxxxxxx"
+        keyboardType="phone-pad"
+        value={f.phone}
+        onChangeText={set('phone')}
+        maxLength={10}
+        error={errors.phone}
+      />
+      <Field
+        label="EMAIL"
+        placeholder="email@example.com"
+        keyboardType="email-address"
+        value={f.email}
+        onChangeText={set('email')}
+        error={errors.email}
+      />
+      <Field
+        label="MẬT KHẨU"
+        placeholder="6–20 ký tự, chỉ chữ và số"
+        secure
+        value={f.password}
+        onChangeText={set('password')}
+        textContentType="newPassword"
+        error={errors.password}
+      />
+      <Field
+        label="XÁC NHẬN MẬT KHẨU"
+        placeholder="Nhập lại mật khẩu"
+        secure
+        value={f.confirm}
+        onChangeText={set('confirm')}
+        error={errors.confirm}
+      />
       {errors.form ? <Banner text={errors.form} tone="error" /> : null}
       <Button title="Tạo tài khoản" onPress={submit} loading={busy} />
       <View style={[s.links, { justifyContent: 'center' }]}>
@@ -182,7 +235,13 @@ export function SignupScreen() {
 }
 
 // ======================= Nhập mã xác thực =======================
-export function VerifyScreen(p: { ident: Identifier; purpose: VerifyPurpose; masked?: string; devCode?: string; retryAfter?: number }) {
+export function VerifyScreen(p: {
+  ident: Identifier;
+  purpose: VerifyPurpose;
+  masked?: string;
+  devCode?: string;
+  retryAfter?: number;
+}) {
   const nav = useNav();
   const [code, setCode] = useState('');
   const [masked, setMasked] = useState(p.masked ?? identText(p.ident));
@@ -219,7 +278,9 @@ export function VerifyScreen(p: { ident: Identifier; purpose: VerifyPurpose; mas
     }
     setBusy(true);
     try {
-      await api.checkVerifyCode({ ...p.ident, code_verify: value, ...(await deviceInfo()) } as Parameters<typeof api.checkVerifyCode>[0]);
+      await api.checkVerifyCode({ ...p.ident, code_verify: value, ...(await deviceInfo()) } as Parameters<
+        typeof api.checkVerifyCode
+      >[0]);
       await nav.reloadSession();
       nav.reset({ name: 'home' });
     } catch (e) {
@@ -247,13 +308,18 @@ export function VerifyScreen(p: { ident: Identifier; purpose: VerifyPurpose; mas
       {devCode ? (
         <Pressable onPress={() => setCode(devCode)} style={s.devCode}>
           <Text style={{ color: colors.muted, fontSize: 13 }}>
-            Mã server trả về (thử nghiệm): <Text style={{ color: colors.accent, fontWeight: '700' }}>{devCode}</Text> — chạm để điền
+            Mã server trả về (thử nghiệm): <Text style={{ color: colors.accent, fontWeight: '700' }}>{devCode}</Text> —
+            chạm để điền
           </Text>
         </Pressable>
       ) : null}
       {error ? <Text style={[s.center, { color: colors.danger, marginTop: 8 }]}>{error}</Text> : null}
       <View style={{ alignItems: 'center', marginVertical: 16 }}>
-        {wait > 0 ? <Text style={{ color: colors.muted }}>Gửi lại mã sau {mm}</Text> : <Link title="Gửi lại mã" onPress={resend} />}
+        {wait > 0 ? (
+          <Text style={{ color: colors.muted }}>Gửi lại mã sau {mm}</Text>
+        ) : (
+          <Link title="Gửi lại mã" onPress={resend} />
+        )}
       </View>
       <View style={{ flex: 1 }} />
       <Button title="Xác nhận" onPress={() => submit()} loading={busy} disabled={code.length !== 6} />
@@ -288,7 +354,14 @@ export function ForgotScreen() {
     <Screen>
       <Header onBack={nav.pop} />
       <Title sub="Nhập số điện thoại hoặc email đã đăng ký, chúng tôi sẽ gửi mã xác minh.">Khôi phục mật khẩu</Title>
-      <Field placeholder="Số điện thoại hoặc email" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" error={error} onSubmitEditing={submit} />
+      <Field
+        placeholder="Số điện thoại hoặc email"
+        value={identifier}
+        onChangeText={setIdentifier}
+        keyboardType="email-address"
+        error={error}
+        onSubmitEditing={submit}
+      />
       <View style={{ flex: 1 }} />
       <Button title="Gửi mã xác minh" onPress={submit} loading={busy} />
     </Screen>
@@ -315,11 +388,19 @@ export function NewPasswordScreen({ ident, code }: { ident: Identifier; code: st
     if (e.pw || e.confirm) return;
     setBusy(true);
     try {
-      await api.forgotPassword({ ...ident, code_verify: code, new_password: pw } as Parameters<typeof api.forgotPassword>[0]);
-      nav.reset({ name: 'login', notice: 'Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.', identifier: identText(ident) });
+      await api.forgotPassword({ ...ident, code_verify: code, new_password: pw } as Parameters<
+        typeof api.forgotPassword
+      >[0]);
+      nav.reset({
+        name: 'login',
+        notice: 'Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.',
+        identifier: identText(ident),
+      });
     } catch (err) {
       if (err instanceof ApiError && err.code === '9993') {
-        Alert.alert('Mã xác thực không đúng', 'Mã sai hoặc đã hết hạn, vui lòng nhập lại.', [{ text: 'OK', onPress: nav.pop }]);
+        Alert.alert('Mã xác thực không đúng', 'Mã sai hoặc đã hết hạn, vui lòng nhập lại.', [
+          { text: 'OK', onPress: nav.pop },
+        ]);
       } else setErrors({ form: errText(err) });
     } finally {
       setBusy(false);
@@ -330,7 +411,14 @@ export function NewPasswordScreen({ ident, code }: { ident: Identifier; code: st
     <Screen>
       <Header onBack={nav.pop} />
       <Title>Tạo mật khẩu mới</Title>
-      <Field label="MẬT KHẨU MỚI" secure value={pw} onChangeText={setPw} textContentType="newPassword" error={errors.pw} />
+      <Field
+        label="MẬT KHẨU MỚI"
+        secure
+        value={pw}
+        onChangeText={setPw}
+        textContentType="newPassword"
+        error={errors.pw}
+      />
       <Field label="XÁC NHẬN MẬT KHẨU MỚI" secure value={confirm} onChangeText={setConfirm} error={errors.confirm} />
       {rules.map((r) => (
         <Text key={r.text} style={{ color: r.ok ? colors.ok : colors.muted, marginBottom: 6 }}>
@@ -346,7 +434,14 @@ export function NewPasswordScreen({ ident, code }: { ident: Identifier; code: st
 
 const s = StyleSheet.create({
   logoWrap: { alignItems: 'center', marginTop: 48, marginBottom: 32 },
-  logo: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#2a2118', alignItems: 'center', justifyContent: 'center' },
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#2a2118',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   appName: { color: colors.text, fontSize: 24, fontWeight: '800', marginTop: 14 },
   tag: { color: colors.muted, fontSize: 11, letterSpacing: 2, marginTop: 4 },
   links: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },

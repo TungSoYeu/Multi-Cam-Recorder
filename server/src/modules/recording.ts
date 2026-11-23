@@ -35,7 +35,8 @@ interface CommandRow {
 }
 
 export function activeSession(ctx: Ctx, roomId: string): SessionRow | undefined {
-  return ctx.db.prepare(`SELECT * FROM recording_sessions WHERE room_id = ? AND status = 'recording'`).get(roomId) as SessionRow | undefined;
+  return ctx.db.prepare(`SELECT * FROM recording_sessions WHERE room_id = ? AND status = 'recording'`).get(roomId) as
+    SessionRow | undefined;
 }
 
 /**
@@ -68,7 +69,9 @@ export function recordingPayload(s: SessionRow | undefined) {
 /** Dừng phiên quay đang chạy (khi đóng phòng / Controller đăng xuất). */
 export function endRecording(ctx: Ctx, roomId: string) {
   ctx.db
-    .prepare(`UPDATE recording_sessions SET status = 'stopped', stopped_at = ? WHERE room_id = ? AND status = 'recording'`)
+    .prepare(
+      `UPDATE recording_sessions SET status = 'stopped', stopped_at = ? WHERE room_id = ? AND status = 'recording'`,
+    )
     .run(ctx.now(), roomId);
 }
 
@@ -114,7 +117,8 @@ export function saveAcks(ctx: Ctx, roomId: string, deviceId: string, raw: unknow
     const b = v.asBody(a);
     const id = v.str(b, 'command_id', { max: 40 });
     const status = v.str(b, 'status', { max: 10 });
-    if (status !== 'done' && status !== 'failed') fail(Codes.PARAM_VALUE_INVALID, 'Invalid ack status', { field: 'acks' });
+    if (status !== 'done' && status !== 'failed')
+      fail(Codes.PARAM_VALUE_INVALID, 'Invalid ack status', { field: 'acks' });
     stmt.run(deviceId, status, ctx.now(), id, roomId);
   }
 }
@@ -128,8 +132,11 @@ export function lastCommandStatus(ctx: Ctx, roomId: string, member: { device_id:
        WHERE c.room_id = ? AND (c.target_device_id IS NULL OR c.target_device_id = ?) AND c.created_at >= ?
        ORDER BY c.created_at DESC, c.rowid DESC LIMIT 1`,
     )
-    .get(member.device_id, roomId, member.device_id, member.joined_at_ms) as { id: string; type: CommandType; status: string | null } | undefined;
-  return c ? { command_id: c.id, type: c.type, status: (c.status ?? 'pending') as 'pending' | 'done' | 'failed' } : null;
+    .get(member.device_id, roomId, member.device_id, member.joined_at_ms) as
+    { id: string; type: CommandType; status: string | null } | undefined;
+  return c
+    ? { command_id: c.id, type: c.type, status: (c.status ?? 'pending') as 'pending' | 'done' | 'failed' }
+    : null;
 }
 
 function ownerRoom(ctx: Ctx, auth: Auth, roomId: string) {
@@ -142,9 +149,9 @@ function ownerRoom(ctx: Ctx, auth: Auth, roomId: string) {
 
 /** Lệnh trùng client_command_id → 1010 kèm kết quả lần trước (client coi như thành công). */
 function duplicate(ctx: Ctx, roomId: string, clientCommandId: string) {
-  const c = ctx.db.prepare('SELECT * FROM commands WHERE room_id = ? AND client_command_id = ?').get(roomId, clientCommandId) as
-    | CommandRow
-    | undefined;
+  const c = ctx.db
+    .prepare('SELECT * FROM commands WHERE room_id = ? AND client_command_id = ?')
+    .get(roomId, clientCommandId) as CommandRow | undefined;
   if (!c) return;
   const payload = c.payload ? (JSON.parse(c.payload) as { recording_session_id?: string }) : {};
   throw new ApiError(Codes.ACTION_DONE_PREVIOUSLY, undefined, {
@@ -168,7 +175,11 @@ function insertCommand(ctx: Ctx, c: Omit<CommandRow, 'id' | 'created_at'>) {
 }
 
 const activeMemberCount = (ctx: Ctx, roomId: string) =>
-  (ctx.db.prepare('SELECT COUNT(*) AS n FROM room_members WHERE room_id = ? AND left_at IS NULL').get(roomId) as { n: number }).n;
+  (
+    ctx.db.prepare('SELECT COUNT(*) AS n FROM room_members WHERE room_id = ? AND left_at IS NULL').get(roomId) as {
+      n: number;
+    }
+  ).n;
 
 export function recordingRoutes(app: FastifyInstance, ctx: Ctx) {
   const { db } = ctx;
@@ -244,32 +255,41 @@ export function recordingRoutes(app: FastifyInstance, ctx: Ctx) {
     });
   });
 
-  // Mở rộng: Controller đổi camera trước/sau của một máy Remote (đề bài: "Controller điều khiển được việc này")
-  app.post<{ Params: { room_id: string; member_id: string } }>('/rooms/:room_id/members/:member_id/camera', async (req) => {
-    const auth = authenticate(ctx, req);
-    const b = v.asBody(req.body);
-    const clientCommandId = v.str(b, 'client_command_id', { max: 64 });
-    const facing = v.str(b, 'camera_facing', { max: 5 });
-    if (facing !== 'front' && facing !== 'back') fail(Codes.PARAM_VALUE_INVALID, 'Invalid camera_facing', { field: 'camera_facing' });
-    const room = ownerRoom(ctx, auth, req.params.room_id);
-    const result = tx(db, () => {
-      duplicate(ctx, room.id, clientCommandId);
-      const m = db
-        .prepare('SELECT device_id FROM room_members WHERE id = ? AND room_id = ? AND left_at IS NULL')
-        .get(req.params.member_id, room.id) as { device_id: string } | undefined;
-      if (!m) fail(Codes.PARAM_VALUE_INVALID, 'Member not found', { field: 'member_id' });
-      if (activeSession(ctx, room.id)) fail(Codes.INVALID_SESSION_STATE, 'Cannot switch camera while recording');
-      const executeAt = ctx.now();
-      const commandId = insertCommand(ctx, {
-        room_id: room.id,
-        target_device_id: m!.device_id,
-        type: 'switch_camera',
-        payload: JSON.stringify({ camera_facing: facing }),
-        client_command_id: clientCommandId,
-        execute_at: executeAt,
+  // Controller đổi camera trước/sau của một máy Remote (ngoài 28 API của đề)
+  app.post<{ Params: { room_id: string; member_id: string } }>(
+    '/rooms/:room_id/members/:member_id/camera',
+    async (req) => {
+      const auth = authenticate(ctx, req);
+      const b = v.asBody(req.body);
+      const clientCommandId = v.str(b, 'client_command_id', { max: 64 });
+      const facing = v.str(b, 'camera_facing', { max: 5 });
+      if (facing !== 'front' && facing !== 'back')
+        fail(Codes.PARAM_VALUE_INVALID, 'Invalid camera_facing', { field: 'camera_facing' });
+      const room = ownerRoom(ctx, auth, req.params.room_id);
+      const result = tx(db, () => {
+        duplicate(ctx, room.id, clientCommandId);
+        const m = db
+          .prepare('SELECT device_id FROM room_members WHERE id = ? AND room_id = ? AND left_at IS NULL')
+          .get(req.params.member_id, room.id) as { device_id: string } | undefined;
+        if (!m) fail(Codes.PARAM_VALUE_INVALID, 'Member not found', { field: 'member_id' });
+        if (activeSession(ctx, room.id)) fail(Codes.INVALID_SESSION_STATE, 'Cannot switch camera while recording');
+        const executeAt = ctx.now();
+        const commandId = insertCommand(ctx, {
+          room_id: room.id,
+          target_device_id: m!.device_id,
+          type: 'switch_camera',
+          payload: JSON.stringify({ camera_facing: facing }),
+          client_command_id: clientCommandId,
+          execute_at: executeAt,
+        });
+        return { commandId, executeAt };
       });
-      return { commandId, executeAt };
-    });
-    return ok({ command_id: result.commandId, camera_facing: facing, execute_at: iso(result.executeAt), execute_at_ms: result.executeAt });
-  });
+      return ok({
+        command_id: result.commandId,
+        camera_facing: facing,
+        execute_at: iso(result.executeAt),
+        execute_at_ms: result.executeAt,
+      });
+    },
+  );
 }

@@ -64,7 +64,8 @@ export function authenticate(ctx: Ctx, req: FastifyRequest): Auth {
     | { id: string; user_id: string; device_id: string | null; access_expires_at: number; revoked_at: number | null }
     | undefined;
   const now = ctx.now();
-  if (!s || s.id !== claims.sid || s.user_id !== claims.sub || s.revoked_at || s.access_expires_at <= now) return fail(Codes.TOKEN_INVALID);
+  if (!s || s.id !== claims.sid || s.user_id !== claims.sub || s.revoked_at || s.access_expires_at <= now)
+    return fail(Codes.TOKEN_INVALID);
   const user = ctx.db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id) as UserRow | undefined;
   if (!user || user.locked || user.role !== claims.acc) return fail(Codes.TOKEN_INVALID);
   let device: DeviceRow | null = null;

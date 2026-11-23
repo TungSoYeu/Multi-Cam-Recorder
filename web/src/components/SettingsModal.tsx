@@ -35,7 +35,12 @@ export function SettingsModal({
       const field = err instanceof ApiError ? (err.data as { field?: string } | null)?.field : undefined;
       setMsg({
         ok: false,
-        text: field === 'password' ? 'Mật khẩu hiện tại không đúng' : err instanceof ApiError ? err.uiMessage : 'Lỗi kết nối',
+        text:
+          field === 'password'
+            ? 'Mật khẩu hiện tại không đúng'
+            : err instanceof ApiError
+              ? err.uiMessage
+              : 'Lỗi kết nối',
       });
     } finally {
       setBusy(false);
@@ -67,9 +72,27 @@ export function SettingsModal({
         </section>
         <form onSubmit={changePassword} className="stack">
           <h4>Đổi mật khẩu</h4>
-          <input type="password" placeholder="Mật khẩu hiện tại" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
-          <input type="password" placeholder="Mật khẩu mới (6–20 chữ/số)" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
-          <input type="password" placeholder="Nhập lại mật khẩu mới" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} autoComplete="new-password" />
+          <input
+            type="password"
+            placeholder="Mật khẩu hiện tại"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoComplete="current-password"
+          />
+          <input
+            type="password"
+            placeholder="Mật khẩu mới (6–20 chữ/số)"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            autoComplete="new-password"
+          />
+          <input
+            type="password"
+            placeholder="Nhập lại mật khẩu mới"
+            value={confirmPw}
+            onChange={(e) => setConfirmPw(e.target.value)}
+            autoComplete="new-password"
+          />
           {msg && <p className={msg.ok ? 'success' : 'error'}>{msg.text}</p>}
           <button className="primary" disabled={busy}>
             Lưu mật khẩu

@@ -61,7 +61,8 @@ export function RoomTab() {
         banner={
           <View style={st.soloBanner}>
             <Text style={st.soloText}>
-              {(sync.exitReason && EXIT_TEXT[sync.exitReason as keyof typeof EXIT_TEXT]) || 'Quay độc lập (không trong phòng)'}
+              {(sync.exitReason && EXIT_TEXT[sync.exitReason as keyof typeof EXIT_TEXT]) ||
+                'Quay độc lập (không trong phòng)'}
             </Text>
           </View>
         }
@@ -142,7 +143,12 @@ function JoinRoom({ onJoined, onSolo }: { onJoined: () => Promise<void>; onSolo:
       if (!device) return setError('Thiết bị chưa được đăng ký, hãy đăng xuất và đăng nhập lại');
       setBusy(true);
       setError(null);
-      const body = { invite_code: inviteCode, device_id: device.device_id, camera_name: cameraName.trim(), grant_control: true as const };
+      const body = {
+        invite_code: inviteCode,
+        device_id: device.device_id,
+        camera_name: cameraName.trim(),
+        grant_control: true as const,
+      };
       try {
         await api.joinRoom(body);
         void setPrefs({ cameraName: body.camera_name }).catch(() => undefined);
@@ -182,13 +188,29 @@ function JoinRoom({ onJoined, onSolo }: { onJoined: () => Promise<void>; onSolo:
       <Text style={st.sub}>Nhập mã 6 ký tự hoặc quét mã QR hiển thị trên máy Controller.</Text>
       <CodeInput value={code} onChange={setCode} />
       <Button title="Quét mã QR" variant="secondary" onPress={() => setScanning(true)} style={{ marginVertical: 12 }} />
-      <Field label="TÊN CAMERA (HIỂN THỊ TRÊN CONTROLLER)" value={cameraName} onChangeText={setCameraName} maxLength={30} autoCapitalize="words" />
+      <Field
+        label="TÊN CAMERA (HIỂN THỊ TRÊN CONTROLLER)"
+        value={cameraName}
+        onChangeText={setCameraName}
+        maxLength={30}
+        autoCapitalize="words"
+      />
       <View style={st.consent}>
         <Text style={st.consentText}>Cho phép Controller điều khiển quay trên thiết bị này (bắt buộc)</Text>
-        <Switch value={consent} onValueChange={setConsent} trackColor={{ true: colors.accent, false: colors.border }} thumbColor="#fff" />
+        <Switch
+          value={consent}
+          onValueChange={setConsent}
+          trackColor={{ true: colors.accent, false: colors.border }}
+          thumbColor="#fff"
+        />
       </View>
       {error ? <Banner text={error} tone="error" /> : null}
-      <Button title="Tham gia phòng" onPress={() => join(code)} loading={busy} disabled={code.length !== 6 || !consent} />
+      <Button
+        title="Tham gia phòng"
+        onPress={() => join(code)}
+        loading={busy}
+        disabled={code.length !== 6 || !consent}
+      />
       <Button title="Quay độc lập" variant="ghost" onPress={onSolo} style={{ marginTop: 8 }} />
       <QrScanner
         visible={scanning}
@@ -208,12 +230,37 @@ const st = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   h1: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 6 },
   sub: { color: colors.muted, fontSize: 14, lineHeight: 20, marginBottom: 16 },
-  consent: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 16 },
+  consent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
   consentText: { color: colors.text, flex: 1, fontSize: 14, lineHeight: 20 },
-  controlled: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.danger, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  controlled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.danger,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
   liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#fff' },
   controlledText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
-  offline: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', marginTop: 6, padding: 6, borderRadius: 8, overflow: 'hidden', fontSize: 12, textAlign: 'center' },
+  offline: {
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    marginTop: 6,
+    padding: 6,
+    borderRadius: 8,
+    overflow: 'hidden',
+    fontSize: 12,
+    textAlign: 'center',
+  },
   soloBanner: { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14 },
   soloText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   smallBtn: { backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },

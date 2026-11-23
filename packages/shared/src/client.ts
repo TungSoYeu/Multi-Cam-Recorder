@@ -49,7 +49,8 @@ export interface BinaryBody {
   binary: Uint8Array;
   headers: Record<string, string>;
 }
-const isBinary = (b: unknown): b is BinaryBody => !!b && typeof b === 'object' && (b as BinaryBody).binary instanceof Uint8Array;
+const isBinary = (b: unknown): b is BinaryBody =>
+  !!b && typeof b === 'object' && (b as BinaryBody).binary instanceof Uint8Array;
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -81,7 +82,11 @@ export function createClient(opts: ClientOptions) {
       const res = await doFetch(base + path, {
         method,
         headers,
-        body: bin ? (body.binary as unknown as NonNullable<Parameters<typeof fetch>[1]>['body']) : body === undefined ? undefined : JSON.stringify(body),
+        body: bin
+          ? (body.binary as unknown as NonNullable<Parameters<typeof fetch>[1]>['body'])
+          : body === undefined
+            ? undefined
+            : JSON.stringify(body),
         signal: ctrl.signal,
       });
       const json = (await res.json().catch(() => null)) as T.ApiEnvelope<D> | null;
@@ -186,8 +191,7 @@ export function createClient(opts: ClientOptions) {
     // B — Phòng và ghép nối bằng mã mời
     createRoom: (b: T.CreateRoomRequest = {}) => call<T.RoomData>('POST', '/rooms', b),
     joinRoom: (b: T.JoinRoomRequest) => call<T.JoinRoomData>('POST', '/rooms/join', b),
-    getRoomMembers: (roomId: string) =>
-      call<T.RoomMembersData>('GET', `/rooms/${encodeURIComponent(roomId)}/members`),
+    getRoomMembers: (roomId: string) => call<T.RoomMembersData>('GET', `/rooms/${encodeURIComponent(roomId)}/members`),
     kickMember: (roomId: string, memberId: string) =>
       call<null>('DELETE', `/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(memberId)}`),
     leaveRoom: (roomId: string) => call<null>('POST', `/rooms/${encodeURIComponent(roomId)}/leave`, {}),
@@ -206,7 +210,8 @@ export function createClient(opts: ClientOptions) {
         binary: bytes,
         headers: { 'X-Chunk-Sha256': sha256Hex },
       } satisfies BinaryBody),
-    getUploadStatus: (uploadId: string) => call<T.UploadStatus>('GET', `/videos/uploads/${encodeURIComponent(uploadId)}`),
+    getUploadStatus: (uploadId: string) =>
+      call<T.UploadStatus>('GET', `/videos/uploads/${encodeURIComponent(uploadId)}`),
     // E — Thư viện video trên server
     /** get_list_videos. Hết dữ liệu (kể cả trang đầu rỗng) → trả danh sách rỗng thay vì lỗi 9994. */
     async listVideos(q: T.VideoListQuery = {}): Promise<T.VideoList> {
@@ -218,23 +223,38 @@ export function createClient(opts: ClientOptions) {
         return await call<T.VideoList>('GET', `/videos${qs ? `?${qs}` : ''}`);
       } catch (e) {
         if (e instanceof ApiError && e.code === Codes.NO_DATA)
-          return { videos: [], total: (e.data as { total?: number } | null)?.total ?? 0, index: q.index ?? 0, count: 0, has_more: '0' };
+          return {
+            videos: [],
+            total: (e.data as { total?: number } | null)?.total ?? 0,
+            index: q.index ?? 0,
+            count: 0,
+            has_more: '0',
+          };
         throw e;
       }
     },
     getVideo: (videoId: string) => call<T.VideoDetail>('GET', `/videos/${encodeURIComponent(videoId)}`),
     getDownloadUrl: (videoId: string) => call<T.DownloadLink>('GET', `/videos/${encodeURIComponent(videoId)}/download`),
     deleteVideo: (videoId: string) => call<{ video_id: string }>('DELETE', `/videos/${encodeURIComponent(videoId)}`),
-    deleteVideosBulk: (videoIds: string[]) => call<{ deleted: string[]; not_found: string[] }>('POST', '/videos/bulk-delete', { video_ids: videoIds }),
+    deleteVideosBulk: (videoIds: string[]) =>
+      call<{ deleted: string[]; not_found: string[] }>('POST', '/videos/bulk-delete', { video_ids: videoIds }),
 
     completeUpload: (uploadId: string, b: T.CompleteUploadRequest = {}) =>
       call<T.VideoInfo>('POST', `/videos/uploads/${encodeURIComponent(uploadId)}/complete`, b),
 
     // Điều khiển quay. Mã 1010 (lệnh trùng do mạng chập chờn) được coi như thành công.
     startRecording: (roomId: string, clientCommandId: string) =>
-      okIfDuplicate(call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/start`, { client_command_id: clientCommandId })),
+      okIfDuplicate(
+        call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/start`, {
+          client_command_id: clientCommandId,
+        }),
+      ),
     stopRecording: (roomId: string, clientCommandId: string) =>
-      okIfDuplicate(call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/stop`, { client_command_id: clientCommandId })),
+      okIfDuplicate(
+        call<T.CommandResult>('POST', `/rooms/${encodeURIComponent(roomId)}/recording/stop`, {
+          client_command_id: clientCommandId,
+        }),
+      ),
     switchCamera: (roomId: string, memberId: string, facing: T.CameraFacing, clientCommandId: string) =>
       okIfDuplicate(
         call<{ command_id: string }>(
