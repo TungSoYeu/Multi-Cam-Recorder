@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { ApiError } from '@multicam/shared';
 import { api } from '../api';
 import { QrScanner } from '../components/QrScanner';
 import { Banner, Button, CodeInput, Field } from '../components/ui';
 import { errText, useNav } from '../nav';
+import { getPrefs, loadPrefs, setPrefs } from '../prefs';
 import { useSync } from '../sync';
 import { colors } from '../theme';
 import { Recorder } from './Recorder';
@@ -17,6 +18,11 @@ const EXIT_TEXT = {
 export function RoomTab() {
   const sync = useSync();
   const [solo, setSolo] = useState(false);
+
+  // 2005 / bị kick: ẩn banner đỏ và đưa máy về chế độ quay độc lập (theo bảng mã response)
+  useEffect(() => {
+    if (sync.exitReason) setSolo(true);
+  }, [sync.exitReason]);
 
   if (!sync.ready)
     return (
@@ -54,12 +60,21 @@ export function RoomTab() {
         roomId={null}
         banner={
           <View style={st.soloBanner}>
-            <Text style={st.soloText}>Quay độc lập (không trong phòng)</Text>
+            <Text style={st.soloText}>
+              {(sync.exitReason && EXIT_TEXT[sync.exitReason as keyof typeof EXIT_TEXT]) || 'Quay độc lập (không trong phòng)'}
+            </Text>
           </View>
         }
         footer={
-          <Pressable onPress={() => setSolo(false)} style={st.smallBtn} accessibilityRole="button">
-            <Text style={st.smallBtnText}>Đóng</Text>
+          <Pressable
+            onPress={() => {
+              sync.clearExitReason();
+              setSolo(false);
+            }}
+            style={st.smallBtn}
+            accessibilityRole="button"
+          >
+            <Text style={st.smallBtnText}>Vào phòng</Text>
           </Pressable>
         }
       />
@@ -67,7 +82,6 @@ export function RoomTab() {
 
   return (
     <JoinRoom
-      notice={sync.exitReason ? EXIT_TEXT[sync.exitReason as keyof typeof EXIT_TEXT] ?? null : null}
       onJoined={async () => {
         sync.clearExitReason();
         await sync.refresh();
@@ -107,10 +121,13 @@ function LeaveButton({ roomId }: { roomId: string }) {
 }
 
 // ---------------- Tham gia phòng ----------------
-function JoinRoom({ notice, onJoined, onSolo }: { notice: string | null; onJoined: () => Promise<void>; onSolo: () => void }) {
+function JoinRoom({ onJoined, onSolo }: { onJoined: () => Promise<void>; onSolo: () => void }) {
   const nav = useNav();
   const [code, setCode] = useState('');
-  const [cameraName, setCameraName] = useState(nav.session?.device?.camera_name ?? 'Cam 01');
+  const [cameraName, setCameraName] = useState(getPrefs().cameraName ?? nav.session?.device?.camera_name ?? 'Cam 01');
+  useEffect(() => {
+    loadPrefs().then((p) => p.cameraName && setCameraName(p.cameraName));
+  }, []);
   const [consent, setConsent] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +145,7 @@ function JoinRoom({ notice, onJoined, onSolo }: { notice: string | null; onJoine
       const body = { invite_code: inviteCode, device_id: device.device_id, camera_name: cameraName.trim(), grant_control: true as const };
       try {
         await api.joinRoom(body);
+        void setPrefs({ cameraName: body.camera_name }).catch(() => undefined);
         await onJoined();
       } catch (e) {
         if (e instanceof ApiError && e.code === '2003') {
@@ -162,7 +180,6 @@ function JoinRoom({ notice, onJoined, onSolo }: { notice: string | null; onJoine
     <ScrollView contentContainerStyle={st.pad} keyboardShouldPersistTaps="handled">
       <Text style={st.h1}>Tham gia phòng</Text>
       <Text style={st.sub}>Nhập mã 6 ký tự hoặc quét mã QR hiển thị trên máy Controller.</Text>
-      {notice ? <Banner text={notice} /> : null}
       <CodeInput value={code} onChange={setCode} />
       <Button title="Quét mã QR" variant="secondary" onPress={() => setScanning(true)} style={{ marginVertical: 12 }} />
       <Field label="TÊN CAMERA (HIỂN THỊ TRÊN CONTROLLER)" value={cameraName} onChangeText={setCameraName} maxLength={30} autoCapitalize="words" />

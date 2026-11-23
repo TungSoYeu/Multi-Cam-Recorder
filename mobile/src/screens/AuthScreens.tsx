@@ -8,7 +8,7 @@ import {
   type Identifier,
   type VerifyPurpose,
 } from '@multicam/shared';
-import { api, deviceInfo, getServerUrl } from '../api';
+import { api, deviceInfo, getServerUrl, onServerChange } from '../api';
 import { Banner, Button, CodeInput, Field, Header, Link, Screen, Title } from '../components/ui';
 import { errField, errText, identText, toIdent, useNav } from '../nav';
 import { colors } from '../theme';
@@ -36,6 +36,7 @@ export function LoginScreen({ notice, identifier: initial }: { notice?: string; 
 
   useEffect(() => {
     getServerUrl().then(setServer);
+    return onServerChange(() => getServerUrl().then(setServer));
   }, []);
 
   async function submit() {
@@ -53,7 +54,7 @@ export function LoginScreen({ notice, identifier: initial }: { notice?: string; 
       nav.reset({ name: 'home' });
     } catch (e) {
       if (e instanceof ApiError && e.code === '9995') {
-        const d = e.data as { verify_required?: string } | null;
+        const d = e.data as { verify_required?: string; reason?: string } | null;
         if (d?.verify_required === '1') {
           // Đã đăng ký nhưng chưa xác thực → gửi mã và chuyển sang màn nhập mã
           try {
@@ -62,7 +63,7 @@ export function LoginScreen({ notice, identifier: initial }: { notice?: string; 
           } catch (err) {
             setErrors({ form: errText(err) });
           }
-        } else setErrors({ id: 'Tài khoản không tồn tại' });
+        } else setErrors({ id: d?.reason === 'locked' ? 'Tài khoản đã bị khóa' : 'Tài khoản không tồn tại' });
       } else if (errField(e) === 'password') setErrors({ pw: 'Sai mật khẩu' });
       else setErrors({ form: errText(e) });
     } finally {

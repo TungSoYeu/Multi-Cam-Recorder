@@ -117,7 +117,7 @@ test('get_room_members, kick_member, leave_room, close_room', async () => {
 
   assert.equal((await call('POST', `/rooms/${id}/leave`, {}, b.token)).code, '1000');
   assert.equal((await call('POST', `/rooms/${id}/leave`, {}, b.token)).code, '1000');
-  assert.equal((await call('GET', `/rooms/${id}/members`, undefined, c)).data.total, 0);
+  assert.equal((await call('GET', `/rooms/${id}/members`, undefined, c)).code, '9994');
 
   assert.equal((await call('DELETE', `/rooms/${id}`, undefined, a.token)).code, '1009');
   assert.equal((await call('DELETE', `/rooms/${id}`, undefined, c)).code, '1000');

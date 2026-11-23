@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { ApiError, ClockSync, type RecordingState, type RoomData, type StoredSession, type SyncRoomData } from '@multicam/shared';
-import { api } from '../api.ts';
+import { api, uuid } from '../api.ts';
 import { CameraIcon, CloseIcon, CopyIcon, DoorIcon, FolderIcon, GearIcon, QrIcon } from '../components/Icons.tsx';
 import { SettingsModal } from '../components/SettingsModal.tsx';
 
@@ -16,7 +16,6 @@ const hhmmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${mmss(s % 3600)}`;
 };
-const uuid = () => crypto.randomUUID();
 const errMsg = (e: unknown) => (e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
 
 function useNow(ms = 250) {
@@ -305,6 +304,11 @@ export function RoomPage({
                       {!on ? 'Mất kết nối' : rec ? 'Đang quay' : 'Sẵn sàng nhận lệnh'}
                       {on && s ? ` · ${s.camera_facing === 'front' ? 'Camera trước' : 'Camera sau'}` : ''}
                     </span>
+                    {rec && s?.live_uploaded_bytes != null ? (
+                      <span className="upload" title="Video đang được tải lên server ngay trong lúc quay">
+                        ⬆ Đang tải trong lúc quay · {(s.live_uploaded_bytes / 1048576).toFixed(0)} MB
+                      </span>
+                    ) : null}
                     {s && s.uploads_pending > 0 ? (
                       <span className="upload" title="Clip đang chờ / đang tải lên server">
                         ⬆ {s.uploads_pending} clip{s.upload_progress !== null ? ` · ${s.upload_progress}%` : ' chờ tải lên'}

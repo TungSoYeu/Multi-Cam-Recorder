@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { passwordProblem } from '@multicam/shared';
-import { api, getServerUrl, setServerUrl, normalizeServer } from '../api';
+import { api, getServerUrl, listServers, normalizeServer, pingServer, setServerUrl } from '../api';
 import { Banner, Button, Field, Header, Screen, Title } from '../components/ui';
 import { errField, errText, useNav } from '../nav';
 import { colors } from '../theme';
@@ -13,8 +13,18 @@ export function ServerScreen() {
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [servers, setServers] = useState<{ url: string; ms: number | null | undefined }[]>([]);
+  const [chosen, setChosen] = useState('');
+
+  async function refresh() {
+    const list = await listServers();
+    setChosen(await getServerUrl());
+    setServers(list.map((u) => ({ url: u, ms: undefined })));
+    for (const u of list) pingServer(u).then((ms) => setServers((s) => s.map((x) => (x.url === u ? { ...x, ms } : x))));
+  }
+
   useEffect(() => {
-    getServerUrl().then(setUrl);
+    void refresh();
   }, []);
 
   async function save() {
@@ -25,6 +35,7 @@ export function ServerScreen() {
       await setServerUrl(url);
       const full = await getServerUrl();
       setUrl(full);
+      void refresh();
       await api.health();
       setStatus({ ok: true, text: `Đã kết nối ${full}` });
     } catch (e) {
@@ -40,8 +51,31 @@ export function ServerScreen() {
       <Title sub="Địa chỉ server Multi-Cam. Dùng IP LAN khi chung Wi-Fi, hoặc URL tunnel (https://…trycloudflare.com) khi dùng 3G/4G.">
         Chọn máy chủ
       </Title>
+      {servers.map((s) => {
+        const on = s.url === chosen;
+        const dot = s.ms === undefined ? colors.muted : s.ms === null ? colors.danger : s.ms > 200 ? '#e5c33a' : colors.ok;
+        return (
+          <Pressable
+            key={s.url}
+            accessibilityRole="button"
+            onPress={async () => {
+              await setServerUrl(s.url);
+              setChosen(s.url);
+            }}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: on ? colors.accent : colors.border, padding: 14, marginBottom: 10 }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>
+                {s.url.replace(/^https?:\/\//, '').replace(/\/api$/, '')}
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>{s.ms === undefined ? 'Đang đo…' : s.ms === null ? 'Không kết nối được' : `${s.ms} ms`}</Text>
+            </View>
+            <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: dot }} />
+          </Pressable>
+        );
+      })}
       <Field
-        label="ĐỊA CHỈ"
+        label="THÊM MÁY CHỦ"
         placeholder="192.168.1.10:3000 hoặc xxx.trycloudflare.com"
         value={url}
         onChangeText={setUrl}

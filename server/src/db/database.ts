@@ -19,6 +19,8 @@ const MIGRATIONS: ((db: DB) => void)[] = [
       CREATE INDEX IF NOT EXISTS ix_videos_owner ON videos (owner_user_id);
       CREATE INDEX IF NOT EXISTS ix_videos_room ON videos (room_id);
     `),
+  // v3: số byte đã upload của clip đang quay (upload ngay trong lúc quay)
+  (db) => db.exec('ALTER TABLE device_states ADD COLUMN live_uploaded_bytes INTEGER;'),
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -28,8 +28,13 @@ function rateLimiter(limit: number, windowMs: number) {
   };
 }
 
-export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: true });
+export async function buildApp(ctx: Ctx, opts: { logger?: boolean | { level: string } } = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: opts.logger ?? false,
+    bodyLimit: 1024 * 1024,
+    // Chỉ tin X-Forwarded-* từ cloudflared chạy cùng máy; máy khác không giả được IP để né giới hạn tần suất
+    trustProxy: ['127.0.0.1', '::1'],
+  });
 
   // JSON body rỗng được coi là {} ; JSON hỏng → 1003.
   app.removeContentTypeParser('application/json');

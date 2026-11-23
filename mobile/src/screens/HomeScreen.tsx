@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api, getServerUrl } from '../api';
-import { Button, Row } from '../components/ui';
+import { api, getServerUrl, onServerChange } from '../api';
+import { Button, Field, Row } from '../components/ui';
 import { errText, useNav } from '../nav';
+import { Paths } from 'expo-file-system';
+import { getPrefs, loadPrefs, QUALITIES, qualityLabel, setPrefs, type Prefs } from '../prefs';
+import { cameraState } from '../cameraState';
+import { formatBytes } from '../video/library';
 import { colors } from '../theme';
 import { DeviceSyncProvider } from '../sync';
 import { LibraryTab } from './LibraryTab';
@@ -53,7 +57,23 @@ function SettingsTab() {
   const [server, setServer] = useState('');
   useEffect(() => {
     getServerUrl().then(setServer);
+    loadPrefs().then(setP);
+    return onServerChange(() => getServerUrl().then(setServer));
   }, []);
+  const [p, setP] = useState<Prefs>(getPrefs());
+  const [name, setName] = useState<string | null>(null);
+  const cameraName = p.cameraName ?? s?.device?.camera_name ?? '';
+
+  async function change(patch: Partial<Prefs>) {
+    await setPrefs(patch);
+    setP(getPrefs());
+  }
+
+  function nextQuality() {
+    if (cameraState.isRecording) return Alert.alert('Đang quay', 'Hãy dừng quay trước khi đổi độ phân giải.');
+    const i = QUALITIES.findIndex((q) => q.value === p.quality);
+    void change({ quality: QUALITIES[(i + 1) % QUALITIES.length].value });
+  }
 
   function logout() {
     Alert.alert('Đăng xuất?', 'Thiết bị sẽ rời phòng hiện tại.', [
@@ -94,8 +114,23 @@ function SettingsTab() {
       <View>
         <Text style={st.section}>THIẾT BỊ</Text>
         <View style={st.group}>
-          <Row label="Tên thiết bị" value={s?.device?.device_name} />
-          <Row label="Tên camera" value={s?.device?.camera_name} />
+          <Row label="Tên camera (áp dụng ở lần vào phòng tới)" value={name === null ? cameraName : ''} onPress={() => setName(name === null ? cameraName : null)} />
+          {name !== null ? (
+            <View style={{ padding: 12, backgroundColor: colors.surface }}>
+              <Field value={name} onChangeText={setName} maxLength={30} autoFocus autoCapitalize="words" />
+              <Button
+                title="Lưu tên"
+                disabled={!name.trim()}
+                onPress={() => {
+                  void change({ cameraName: name.trim() });
+                  setName(null);
+                }}
+              />
+            </View>
+          ) : null}
+          <Row label="Độ phân giải" value={qualityLabel(p.quality)} onPress={nextQuality} />
+          <Row label="Dung lượng còn trống" value={`${formatBytes(Paths.availableDiskSpace)} / ${formatBytes(Paths.totalDiskSpace)}`} />
+          <Row label="Thiết bị" value={s?.device?.device_name} />
           <Row label="Máy chủ" value={server.replace(/^https?:\/\//, '')} onPress={() => nav.push({ name: 'server' })} />
         </View>
       </View>

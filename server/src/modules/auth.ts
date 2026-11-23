@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { authenticate, iso, type Ctx, type DeviceRow, type UserRow } from '../context.ts';
+import { authenticate, type Ctx, type DeviceRow, type UserRow } from '../context.ts';
 import { tx } from '../db/database.ts';
+import { signJwt } from '../lib/jwt.ts';
 import { Codes, fail, ok } from '../lib/errors.ts';
 import {
   hashPassword,
@@ -76,26 +78,29 @@ function upsertDevice(ctx: Ctx, userId: string, d: DeviceInput): DeviceRow {
   return ctx.db.prepare('SELECT * FROM devices WHERE id = ?').get(id) as unknown as DeviceRow;
 }
 
-function issueTokens(ctx: Ctx) {
-  const now = ctx.now();
+/** access_token là JWT (claim `acc` = vai trò); refresh_token là chuỗi ngẫu nhiên dùng một lần. CSDL chỉ giữ hash. */
+function issueTokens(ctx: Ctx, user: Pick<UserRow, 'id' | 'role'>, sessionId: string) {
+  const iat = Math.floor(ctx.now() / 1000);
+  const exp = iat + ctx.config.accessTtlSec;
   return {
-    access: newToken('at'),
+    access: signJwt({ sub: user.id, acc: user.role, sid: sessionId, jti: newId('j', 12), iat, exp }, ctx.config.mediaSecret),
     refresh: newToken('rt'),
-    accessExp: now + ctx.config.accessTtlSec * 1000,
+    accessExp: exp * 1000,
   };
 }
 
-function createSession(ctx: Ctx, userId: string, deviceId: string | null) {
+function createSession(ctx: Ctx, user: Pick<UserRow, 'id' | 'role'>, deviceId: string | null) {
   const now = ctx.now();
-  const t = issueTokens(ctx);
+  const sessionId = newId('ss', 12);
+  const t = issueTokens(ctx, user, sessionId);
   ctx.db
     .prepare(
       `INSERT INTO sessions (id, user_id, device_id, access_hash, access_expires_at, refresh_hash, refresh_expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
-      newId('ss', 12),
-      userId,
+      sessionId,
+      user.id,
       deviceId,
       sha256(t.access),
       t.accessExp,
@@ -108,7 +113,10 @@ function createSession(ctx: Ctx, userId: string, deviceId: string | null) {
 
 /** Cấp cặp token mới cho phiên hiện có (refresh token cũ bị vô hiệu). */
 function rotateSession(ctx: Ctx, sessionId: string, oldRefreshHash: string | null) {
-  const t = issueTokens(ctx);
+  const user = ctx.db
+    .prepare('SELECT u.id, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?')
+    .get(sessionId) as unknown as Pick<UserRow, 'id' | 'role'>;
+  const t = issueTokens(ctx, user, sessionId);
   ctx.db
     .prepare(
       `UPDATE sessions SET access_hash = ?, access_expires_at = ?, refresh_hash = ?, prev_refresh_hash = COALESCE(?, prev_refresh_hash)
@@ -249,19 +257,31 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
         `INSERT INTO verify_codes (id, user_id, purpose, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
       ).run(newId('vc', 10), user.id, purpose, codeHash(user.id, code), now + config.verifyTtlSec * 1000, now);
     });
+    // Controller: KHÔNG trả mã qua API (nếu trả, ai gọi được API cũng chiếm được tài khoản).
+    // Mã gửi email nếu có SMTP, đồng thời hiện trên màn hình server (máy Controller chính là server).
+    const isController = user.role === 'controller';
+    if (isController) ctx.showControllerCode?.(code);
+    const returnCode = config.returnVerifyCode && !isController;
+    let emailed = false;
     if (ctx.sender) {
-      await ctx.sender.send({
-        target: ident.kind === 'email' ? user.email : user.phone,
-        channel: ident.kind === 'email' ? 'email' : 'sms',
-        purpose,
-        code,
-      });
+      try {
+        await ctx.sender.send({ target: user.email, purpose, code, expiresInSec: config.verifyTtlSec });
+        emailed = true;
+      } catch (e) {
+        req.log.error(e);
+      }
+    }
+    if (!emailed && !returnCode && !isController) {
+      // Không có cách nào để người dùng nhận mã → cho gọi lại ngay thay vì bắt chờ 120 giây
+      db.prepare('DELETE FROM verify_codes WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL').run(user.id, purpose);
+      return fail(Codes.UNKNOWN_ERROR, 'Cannot deliver verification code');
     }
     return ok({
       expires_in: config.verifyTtlSec,
       resend_after: config.verifyResendSec,
-      masked_target: ident.kind === 'email' ? maskEmail(user.email) : maskPhone(user.phone),
-      ...(config.returnVerifyCode ? { code_verify: code } : {}),
+      // Chưa có cổng SMS: có SMTP thì mã luôn đi qua email, kể cả khi nhập số điện thoại
+      masked_target: emailed || ident.kind === 'email' ? maskEmail(user.email) : maskPhone(user.phone),
+      ...(returnCode ? { code_verify: code } : {}),
     });
   });
 
@@ -277,7 +297,7 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     const payload = tx(db, () => {
       db.prepare('UPDATE users SET active = 1, updated_at = ? WHERE id = ?').run(ctx.now(), user.id);
       const device = dev ? upsertDevice(ctx, user.id, dev) : null;
-      return loginPayload({ ...user, active: 1 }, device, createSession(ctx, user.id, device?.id ?? null));
+      return loginPayload({ ...user, active: 1 }, device, createSession(ctx, user, device?.id ?? null));
     });
     return ok({ user_id: user.id, active: '1', ...payload });
   });
@@ -297,7 +317,7 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     if (user.locked) return fail(Codes.USER_NOT_VALIDATED, 'Account is locked', { reason: 'locked' });
     const payload = tx(db, () => {
       const device = upsertDevice(ctx, user.id, dev);
-      return loginPayload(user, device, createSession(ctx, user.id, device.id));
+      return loginPayload(user, device, createSession(ctx, user, device.id));
     });
     return ok(payload);
   });
@@ -316,7 +336,9 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
       return fail(Codes.TOKEN_INVALID);
     }
     if (s.revoked_at || s.refresh_expires_at <= now) return fail(Codes.TOKEN_INVALID);
-    return ok(rotateSession(ctx, s.id, hash));
+    // Đề bài refresh_token: expires_in là chuỗi "3600"
+    const t = rotateSession(ctx, s.id, hash);
+    return ok({ ...t, expires_in: String(t.expires_in) });
   });
 
   // 6. forgot_password — đặt lại mật khẩu bằng mã xác thực
@@ -414,12 +436,33 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
   });
 }
 
+/** Mật khẩu quá yếu, không được dùng. */
+export const LEAKED_DEFAULT_PASSWORD = '12345678';
+
+export function randomPassword(): string {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 12 }, () => chars[crypto.randomInt(chars.length)]).join('');
+}
+
+export interface ControllerStatus {
+  status: 'created' | 'exists';
+  email: string;
+  /** Mật khẩu vừa sinh ngẫu nhiên (khi .env để trống hoặc còn mật khẩu mẫu) */
+  generated?: string;
+  /** Đang dùng mật khẩu quá yếu */
+  leaked: boolean;
+}
+
 /** Tạo tài khoản Controller duy nhất nếu chưa có (do nhà phát hành cấp sẵn). */
-export async function ensureController(ctx: Ctx): Promise<'created' | 'exists'> {
-  const existing = ctx.db.prepare(`SELECT id FROM users WHERE role = 'controller'`).get();
-  if (existing) return 'exists';
-  const c = ctx.config.controller;
-  if (!c.password) throw new Error('Chưa cấu hình CONTROLLER_PASSWORD trong server/.env');
+export async function ensureController(ctx: Ctx): Promise<ControllerStatus> {
+  const existing = ctx.db.prepare(`SELECT email, password_hash FROM users WHERE role = 'controller'`).get() as
+    | { email: string; password_hash: string }
+    | undefined;
+  if (existing)
+    return { status: 'exists', email: existing.email, leaked: await verifyPassword(LEAKED_DEFAULT_PASSWORD, existing.password_hash) };
+  const c = { ...ctx.config.controller };
+  const generated = c.password && c.password !== LEAKED_DEFAULT_PASSWORD ? undefined : randomPassword();
+  if (generated) c.password = generated;
   const now = ctx.now();
   ctx.db
     .prepare(
@@ -427,7 +470,6 @@ export async function ensureController(ctx: Ctx): Promise<'created' | 'exists'> 
        VALUES (?, ?, ?, ?, ?, ?, 'controller', 1, ?, ?)`,
     )
     .run(newId('u', 8), c.firstName, c.lastName, c.email, c.phone, await hashPassword(c.password), now, now);
-  return 'created';
+  return { status: 'created', email: c.email, generated, leaked: false };
 }
 
-export { iso };

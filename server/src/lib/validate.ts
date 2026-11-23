@@ -44,6 +44,15 @@ export function optInt(b: Body, name: string, min: number, max: number): number 
   return n;
 }
 
+/** Số nguyên thật sự (đề bài 1003: gửi battery_level dạng chuỗi là sai kiểu). */
+export function optStrictInt(b: Body, name: string, min: number, max: number): number | undefined {
+  const x = b[name];
+  if (x === undefined || x === null) return undefined;
+  if (typeof x !== 'number') return fail(Codes.PARAM_TYPE_INVALID, `${name} must be a number`, { field: name });
+  if (!Number.isInteger(x) || x < min || x > max) return fail(Codes.PARAM_VALUE_INVALID, `Invalid ${name}`, { field: name });
+  return x;
+}
+
 export function int(b: Body, name: string, min: number, max: number): number {
   const n = optInt(b, name, min, max);
   if (n === undefined) fail(Codes.PARAM_NOT_ENOUGH, `Missing ${name}`, { field: name });

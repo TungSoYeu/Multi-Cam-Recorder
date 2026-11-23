@@ -3,7 +3,8 @@ import { Alert, FlatList, Image, Modal, Pressable, StyleSheet, Text, View, useWi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { colors } from '../theme';
-import { deleteClips, formatBytes, formatDuration, listClips, subscribeClips, type LocalClip } from '../video/library';
+import * as Sharing from 'expo-sharing';
+import { clipFile, deleteClips, formatBytes, formatDuration, listClips, subscribeClips, thumbFile, type LocalClip } from '../video/library';
 import { blockedReason, resumeUploads, subscribeUploads, uploadUi, type UploadUi } from '../video/uploader';
 
 function uploadLabel(u: UploadUi): { text: string; color: string } {
@@ -79,6 +80,23 @@ export function LibraryTab() {
     ]);
   }
 
+  /** Lưu clip CỦA MÁY NÀY ra ngoài ứng dụng (bảng chia sẻ của hệ điều hành) — không phải tải từ server. */
+  async function saveToPhone() {
+    const clip = clips.find((c) => selected.has(c.id));
+    if (!clip || selected.size !== 1) return;
+    try {
+      await Sharing.shareAsync(clipFile(clip).uri, { mimeType: 'video/mp4', UTI: 'public.mpeg-4' });
+    } catch (e) {
+      Alert.alert('Không lưu được', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const barItems = [
+    { icon: '💾', label: 'Lưu về máy', on: selected.size === 1, color: colors.text, run: saveToPhone },
+    { icon: '🗑️', label: 'Xóa', on: selected.size > 0, color: colors.danger, run: removeSelected },
+    { icon: '⬆️', label: 'Tải lên', on: clips.some((c) => selected.has(c.id) && !c.uploaded), color: colors.text, run: resumeUploads },
+  ];
+
   return (
     <View style={{ flex: 1 }}>
       <View style={st.header}>
@@ -131,8 +149,8 @@ export function LibraryTab() {
               accessibilityLabel={item.file_name}
             >
               <View style={[st.thumb, { height: tileW * 0.62 }]}>
-                {item.thumbnail_uri ? (
-                  <Image source={{ uri: item.thumbnail_uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                {item.has_thumbnail ? (
+                  <Image source={{ uri: thumbFile(item).uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 ) : (
                   <Text style={{ fontSize: 28 }}>🎬</Text>
                 )}
@@ -170,10 +188,12 @@ export function LibraryTab() {
 
       {selecting ? (
         <View style={st.bottomBar}>
-          <Pressable onPress={removeSelected} disabled={!selected.size} style={{ opacity: selected.size ? 1 : 0.4, alignItems: 'center' }}>
-            <Text style={{ fontSize: 20 }}>🗑️</Text>
-            <Text style={{ color: colors.danger, fontWeight: '600' }}>Xóa</Text>
-          </Pressable>
+          {barItems.map((b) => (
+            <Pressable key={b.label} onPress={b.run} disabled={!b.on} accessibilityRole="button" style={{ opacity: b.on ? 1 : 0.4, alignItems: 'center', minWidth: 80 }}>
+              <Text style={{ fontSize: 20 }}>{b.icon}</Text>
+              <Text style={{ color: b.color, fontWeight: '600', fontSize: 12 }}>{b.label}</Text>
+            </Pressable>
+          ))}
         </View>
       ) : null}
 
@@ -185,7 +205,7 @@ export function LibraryTab() {
 }
 
 function Player({ clip, onClose }: { clip: LocalClip; onClose: () => void }) {
-  const player = useVideoPlayer(clip.uri, (p) => {
+  const player = useVideoPlayer(clipFile(clip).uri, (p) => {
     p.loop = false;
     p.play();
   });
@@ -229,7 +249,7 @@ const st = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 80 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
   muted: { color: colors.muted, fontSize: 14, textAlign: 'center' },
-  bottomBar: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  bottomBar: { flexDirection: 'row', justifyContent: 'space-evenly', paddingVertical: 10, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerHeader: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   playerMeta: { color: '#aaa', textAlign: 'center', padding: 12, fontSize: 13 },
 });

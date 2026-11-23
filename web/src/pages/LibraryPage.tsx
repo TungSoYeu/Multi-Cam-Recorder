@@ -259,6 +259,10 @@ export function LibraryPage({ onBack }: { onBack: () => void }) {
           onClose={() => setPlaying(null)}
           onDownload={() => download([playing])}
           onDelete={() => remove([playing.video_id])}
+          onGone={() => {
+            setPlaying(null);
+            load();
+          }}
         />
       )}
       {syncGroup && <SyncPlayer videos={syncGroup} onClose={() => setSyncGroup(null)} />}

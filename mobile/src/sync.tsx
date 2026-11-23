@@ -5,7 +5,6 @@ import { Paths } from 'expo-file-system';
 import {
   ApiError,
   ClockSync,
-  type CameraFacing,
   type CommandAck,
   type DeviceCommand,
   type LeftReason,
@@ -13,16 +12,12 @@ import {
   type SyncDeviceData,
 } from '@multicam/shared';
 import { api } from './api';
+import { cameraState } from './cameraState';
 import { useNav } from './nav';
+import { liveUploadedBytes } from './video/liveUpload';
 import { resumeUploads, uploadSummary } from './video/uploader';
 
-/** Trạng thái camera hiện tại — màn quay cập nhật, vòng sync đọc và gửi lên server. */
-export const cameraState = {
-  facing: 'back' as CameraFacing,
-  isRecording: false,
-  resolution: '1080p',
-  fps: 30,
-};
+export { cameraState };
 
 /** Đồng hồ server ước lượng từ các lần sync — dùng để thực hiện lệnh đúng thời điểm hẹn. */
 export const clock = new ClockSync();
@@ -104,15 +99,20 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
     const sending = acks.current.splice(0);
     try {
       const up = await uploadSummary().catch(() => null);
+      const battery = await readBattery();
+      const storage = readFreeStorage();
+      const live = liveUploadedBytes();
+      // Đo thời gian NGAY trước khi gửi: tính cả lúc đọc pin sẽ làm lệch phép bù đồng hồ
       const sentAt = Date.now();
       const d = await api.syncDevice(deviceId, {
         camera_facing: cameraState.facing,
         is_recording: cameraState.isRecording,
-        battery_level: await readBattery(),
-        free_storage_bytes: readFreeStorage(),
+        battery_level: battery,
+        free_storage_bytes: storage,
         resolution: cameraState.resolution,
         fps: cameraState.fps,
         ...(up ? { uploads_pending: up.pending, ...(up.progress !== null ? { upload_progress: up.progress } : {}) } : {}),
+        ...(live !== null ? { live_uploaded_bytes: live } : {}),
         ...(sending.length ? { acks: sending } : {}),
       });
       clock.sample(sentAt, Date.now(), d.server_time_ms);

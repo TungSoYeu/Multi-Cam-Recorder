@@ -19,7 +19,7 @@ Base URL: `http://<máy chủ>:3000/api` (hoặc `https://xxxx.trycloudflare.com
 | 2 | get_verify_code | `POST /auth/verify-code` | `email` **hoặc** `phone`, `purpose: signup \| forgot_password` | `expires_in:300, resend_after:120, masked_target, code_verify`. `1012` khi chưa đủ 120 giây (`data.retry_after`). `9995` không có tài khoản |
 | 3 | check_verify_code | `POST /auth/verify-code/check` | `email\|phone, code_verify`; *tùy chọn* `device_id, device_type, device_name` | Kích hoạt tài khoản và trả dữ liệu như login, kèm `user_id, active:"1"`. `9993` mã sai hoặc hết hạn (khóa sau 5 lần sai) |
 | 4 | login | `POST /auth/login` | `email\|phone, password, device_id` (UUID client), `device_type` (1 android, 2 ios, 4 web), `device_name` | `user, account_role, access_token, refresh_token, expires_in:3600, device{device_id, device_type, device_name, camera_name}`. `9995` không tồn tại; `9995 + verify_required:"1"` chưa xác thực; `1004 + field:"password"` sai mật khẩu |
-| 5 | refresh_token | `POST /auth/refresh` | `refresh_token` | Cặp token mới. Refresh token cũ hết hiệu lực; dùng lại thì cả phiên bị thu hồi (`9998`) |
+| 5 | refresh_token | `POST /auth/refresh` | `refresh_token` | Cặp token mới, `expires_in` là chuỗi `"3600"` như đề bài. Refresh token cũ hết hiệu lực; dùng lại thì cả phiên bị thu hồi (`9998`) |
 | 6 | forgot_password | `POST /auth/password/forgot` | `email\|phone, code_verify` (purpose forgot_password), `new_password` | `null`. Thu hồi mọi phiên của tài khoản |
 | 7 | change_password | `PUT /auth/password` 🔒 | `password, new_password` | Token mới cho phiên hiện tại; phiên ở máy khác nhận `9998` |
 | 8 | logout | `POST /auth/logout` 🔒 | | Hủy phiên hiện tại. Remote rời phòng; Controller đóng phòng (`2005`) |
@@ -32,7 +32,7 @@ Base URL: `http://<máy chủ>:3000/api` (hoặc `https://xxxx.trycloudflare.com
 |---|---|---|---|---|
 | 10 | create_room | `POST /rooms` | Controller (`1009`) | `room_name?, max_members?` (mặc định 8). Trả `room_id, room_name, invite_code, max_members, expires_at, created_at, members[]`. Đã có phòng mở thì trả lại phòng đó; nếu mã đã hết hạn thì cấp mã mới |
 | 11 | join_room | `POST /rooms/join` | Remote | `invite_code` (6 ký tự, không phân biệt hoa thường), `device_id` (= `device.device_id` lúc login), `camera_name`, `grant_control:true` (bắt buộc). Lỗi: `2001` mã sai hoặc hết hạn, `2002` phòng đầy, `2003` đang ở phòng khác (`data.room_id`). Gọi lại trả cùng `member_id` |
-| 12 | get_room_members | `GET /rooms/{room_id}/members` | Chủ phòng, hoặc Remote đang trong phòng | `room_id, room_name, status, total, members[{member_id, user_id, device_id, camera_name, device_name, device_type, is_online, joined_at}]`. `is_online="1"` nếu máy gọi API trong 15 giây gần nhất. Remote bị kick nhận `1009 + reason:"kicked"`; phòng đóng trả `2005` |
+| 12 | get_room_members | `GET /rooms/{room_id}/members` | Chủ phòng, hoặc Remote đang trong phòng (phòng trống → `9994`) | `room_id, room_name, status, total, members[{member_id, user_id, device_id, camera_name, device_name, device_type, is_online, joined_at}]`. `is_online="1"` nếu máy gọi API trong 15 giây gần nhất. Remote bị kick nhận `1009 + reason:"kicked"`; phòng đóng trả `2005` |
 | 13 | kick_member | `DELETE /rooms/{room_id}/members/{member_id}` | Chủ phòng (`2004`) | |
 | 14 | leave_room | `POST /rooms/{room_id}/leave` | | Remote rời phòng (gọi lặp lại vô hại). Controller gọi = đóng phòng |
 | 15 | close_room | `DELETE /rooms/{room_id}` | Chủ phòng | Mọi thành viên bị đưa ra |
@@ -69,13 +69,14 @@ Remote không cần gọi get_room_members để biết mình bị kick hay phò
 
 | # | API | Method & path | Tham số / kết quả |
 |---|---|---|---|
-| 20 | init_upload | `POST /videos/uploads` | `local_video_uid` (UUID clip sinh trên máy), `file_name`, `total_size`, `checksum_sha256` (toàn file, hex), *tùy chọn* `chunk_size` (256 KB–8 MB, mặc định 5 MB), `duration_ms`, `recording_session_id`, `recorded_at_ms`, `camera_facing`, `mime_type`. Trả `upload_id, chunk_size, total_chunks, received_count, missing_chunks[], expires_at`. Clip đang upload dở thì trả lại **đúng phiên cũ** (resume). Lỗi: `3005` đã có trên server (`data.video_id`, coi như xong), `1006` > 1 GB, `3004` vượt hạn mức (tính cả phiên đang upload), `1004` `recording_session_id` không thuộc phòng mà máy từng vào |
+| 20 | init_upload | `POST /videos/uploads` | `local_video_uid` (UUID clip sinh trên máy), `file_name`, `total_size`, `checksum_sha256` (toàn file, hex), *tùy chọn* `streaming:true` (upload trong lúc quay: bỏ `total_size`, `checksum_sha256`, gửi ở complete_upload), `chunk_size` (256 KB–8 MB, mặc định 5 MB), `duration_ms`, `recording_session_id`, `recorded_at_ms`, `camera_facing`, `mime_type`. Trả `upload_id, chunk_size, total_chunks, received_count, missing_chunks[], expires_at`. Clip đang upload dở thì trả lại **đúng phiên cũ** (resume). Lỗi: `3005` đã có trên server (`data.video_id`, coi như xong), `1006` > 1 GB, `3004` vượt hạn mức (tính cả phiên đang upload), `1004` `recording_session_id` không thuộc phòng mà máy từng vào |
 | 21 | upload_chunk | `PUT /videos/uploads/{upload_id}/chunks/{index}` | Body nhị phân `application/octet-stream`, header `X-Chunk-Sha256`. Mảnh cuối có thể ngắn hơn. Lỗi: `3003` sai SHA-256 của mảnh (gửi lại mảnh đó), `1004` sai kích thước / sai chỉ số, `1002` thiếu header, `1007` ghi đĩa thất bại, `3001` phiên không tồn tại / hết hạn / của người khác. Gửi lại mảnh đã có thì ghi đè. Mỗi mảnh nhận được sẽ gia hạn phiên thêm 24 giờ |
-| 22 | get_upload_status | `GET /videos/uploads/{upload_id}` | `missing_chunks[]`, `received_count`, `status`, `video_id` |
-| 23 | complete_upload | `POST /videos/uploads/{upload_id}/complete` | *Tùy chọn* `thumbnail_base64` (JPEG ≤ 300 KB). Ghép mảnh, kiểm tra SHA-256 toàn file, remux MP4 (nếu có ffmpeg), tạo video. Trả `video_id, file_name, size_bytes, duration_ms, room_id, recording_session_id, has_thumbnail, …`. Lỗi: `3002` thiếu mảnh (`data.missing_chunks`), `3003` sai toàn file (`data.scope = "file"`, phiên bị hủy → mở phiên mới). Gọi lại sau khi đã xong thì trả cùng video |
+| 22 | get_upload_status | `GET /videos/uploads/{upload_id}` | `missing_chunks[]`, `chunk_hashes{index: sha256}`, `received_count`, `status`, `streaming`, `video_id` |
+| 23 | complete_upload | `POST /videos/uploads/{upload_id}/complete` | *Tùy chọn* `thumbnail_base64` (JPEG ≤ 300 KB). Phiên streaming bắt buộc `total_size, checksum_sha256`. Ghép mảnh, kiểm tra SHA-256 toàn file, remux MP4 (nếu có ffmpeg), tạo video. Trả `video_id, file_name, size_bytes, duration_ms, room_id, recording_session_id, has_thumbnail, …`. Lỗi: `3002` thiếu mảnh (`data.missing_chunks`), `3003` sai toàn file (`data.scope = "file"`, phiên bị hủy → mở phiên mới). Gọi lại sau khi đã xong thì trả cùng video |
 
 **Phía app (`mobile/src/video/uploader.ts`):**
-- Dừng quay → lưu clip → tự đưa vào hàng đợi, upload lần lượt từng clip.
+- **Trong lúc quay** (`liveUpload.ts`): gửi từng mảnh 1 MB camera đã ghi xong lên phiên streaming; Controller thấy `live_uploaded_bytes`. Lỗi ở bước này không ảnh hưởng clip.
+- Dừng quay → lưu clip → so SHA-256 từng mảnh với `chunk_hashes`, chỉ gửi lại mảnh khác → complete_upload. Không có phiên streaming thì upload như thường.
 - SHA-256 tính bằng `@noble/hashes`, đọc từng khối 4 MB nên không nạp cả file vào RAM.
 - Mảnh nhị phân gửi bằng `expo/fetch`.
 - Mỗi mảnh thử tối đa 3 lần (chờ 1 s, 2 s, 4 s); vẫn lỗi thì tạm dừng, tự thử lại khi mở lại hoặc quay lại app, hoặc khi bấm "Thử lại" trong Thư viện.
@@ -108,7 +109,7 @@ Remote không cần gọi get_room_members để biết mình bị kick hay phò
 
 | Đề bài | Ở đây | Lý do |
 |---|---|---|
-| `expires_in` lúc là số, lúc là chuỗi | Luôn là số | Thống nhất kiểu |
 | `check_verify_code` không có thông tin thiết bị | Nhận thêm `device_*` tùy chọn | Để vào thẳng Trang chính và join phòng ngay |
 | Không ghi tham số forgot_password | `email\|phone, code_verify, new_password` | Đặt lại mật khẩu trong một bước |
-| Token `eyJ...` (JWT) | Token opaque `at_...`/`rt_...` | Thu hồi được ngay khi đổi mật khẩu hoặc logout |
+| `get_verify_code` trả luôn mã | Remote: có. Controller: không, mã hiện ở terminal server / gửi email | Nếu trả, ai gọi được API cũng chiếm được tài khoản Controller duy nhất |
+| Mã gửi qua email hoặc SMS | Email (SMTP); chưa có cổng SMS | Cổng SMS phải trả phí |

@@ -5,13 +5,22 @@ import { openDatabase } from './db/database.ts';
 import { ensureController } from './modules/auth.ts';
 import { cleanupExpiredUploads } from './modules/uploads.ts';
 import { ffmpegAvailable } from './lib/media.ts';
+import { createMailer } from './lib/mailer.ts';
+import type { Ctx } from './context.ts';
 
 const config = loadConfig();
 const db = openDatabase(config.dbPath);
-const ctx = { db, config, now: Date.now };
+const sender = createMailer(process.env);
+const ctx: Ctx = {
+  db,
+  config,
+  now: Date.now,
+  sender,
+  showControllerCode: (code) => console.log(`\n  >>> Mã đặt lại mật khẩu Controller: ${code} (hiệu lực 5 phút)\n`),
+};
 
 const seeded = await ensureController(ctx);
-const app = await buildApp(ctx, { logger: true });
+const app = await buildApp(ctx, { logger: { level: process.env.LOG_LEVEL || 'info' } });
 await app.listen({ port: config.port, host: config.host });
 
 const lan = Object.values(os.networkInterfaces())
@@ -22,13 +31,18 @@ const lan = Object.values(os.networkInterfaces())
 console.log(`
   Multi-Cam Recorder server
   - CSDL:        ${config.dbPath}
-  - Controller:  ${config.controller.email} (${seeded === 'created' ? 'vừa tạo' : 'đã có'})
+  - Controller:  ${seeded.email} (${seeded.status === 'created' ? 'vừa tạo' : 'đã có'})
+  - Email OTP:   ${sender ? 'gửi qua SMTP' : 'chưa cấu hình SMTP_URL — mã trả trong API như đề bài'}
   - Local:       http://localhost:${config.port}        (giao diện Controller)
   - API:         http://localhost:${config.port}/api
   - ffmpeg:      ${ffmpegAvailable(config.ffmpegPath) ? 'có (remux MP4 + ảnh thu nhỏ)' : 'không có — video giữ nguyên file từ máy quay'}
   - LAN:         ${lan.join(', ') || '(không có)'}
   - 3G/4G:       chạy "cloudflared tunnel --url http://localhost:${config.port}" và dùng URL https://...trycloudflare.com
 `);
+
+if (seeded.generated) console.log(`  >>> Mật khẩu Controller (chỉ hiện lần này): ${seeded.generated}\n`);
+if (seeded.leaked)
+  console.warn('  !!! Controller đang dùng mật khẩu quá yếu. Chạy: npm run controller:password\n');
 
 // Dọn phiên upload quá hạn mỗi 30 phút
 cleanupExpiredUploads(ctx);

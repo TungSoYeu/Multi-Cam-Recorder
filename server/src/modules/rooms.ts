@@ -35,6 +35,7 @@ interface MemberRow {
   fps: number | null;
   uploads_pending: number | null;
   upload_progress: number | null;
+  live_uploaded_bytes: number | null;
   state_updated_at: number | null;
 }
 
@@ -48,7 +49,7 @@ export function members(ctx: Ctx, roomId: string) {
   const rows = ctx.db
     .prepare(
       `SELECT m.id, m.user_id, m.device_id, m.camera_name, m.joined_at, d.device_name, d.device_type, d.last_seen_at,
-              s.camera_facing, s.is_recording, s.battery_level, s.free_storage_bytes, s.resolution, s.fps, s.uploads_pending, s.upload_progress,
+              s.camera_facing, s.is_recording, s.battery_level, s.free_storage_bytes, s.resolution, s.fps, s.uploads_pending, s.upload_progress, s.live_uploaded_bytes,
               s.updated_at AS state_updated_at
        FROM room_members m
        JOIN devices d ON d.id = m.device_id
@@ -79,6 +80,7 @@ export function members(ctx: Ctx, roomId: string) {
             fps: m.fps,
             uploads_pending: m.uploads_pending ?? 0,
             upload_progress: m.upload_progress,
+            live_uploaded_bytes: m.live_uploaded_bytes,
             updated_at: iso(m.state_updated_at),
           },
   }));
@@ -232,6 +234,7 @@ export function roomRoutes(app: FastifyInstance, ctx: Ctx) {
       if (!m || m.left_at) fail(Codes.NOT_ACCESS, 'Device is not in this room', { reason: m?.left_reason ?? 'not_member' });
     }
     const list = members(ctx, room.id);
+    if (!list.length) fail(Codes.NO_DATA, 'Room has no device'); // đề bài 9994: phòng chưa có máy nào
     return ok({ room_id: room.id, room_name: room.name, status: room.status, total: list.length, members: list });
   });
 

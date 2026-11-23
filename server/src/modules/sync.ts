@@ -23,12 +23,13 @@ export function syncRoutes(app: FastifyInstance, ctx: Ctx) {
     const facing = v.optStr(b, 'camera_facing', { max: 5 }) ?? 'back';
     if (facing !== 'front' && facing !== 'back') fail(Codes.PARAM_VALUE_INVALID, 'Invalid camera_facing', { field: 'camera_facing' });
     const isRecording = b.is_recording === undefined ? false : v.bool(b, 'is_recording');
-    const battery = v.optInt(b, 'battery_level', -1, 100);
-    const storage = v.optInt(b, 'free_storage_bytes', 0, Number.MAX_SAFE_INTEGER);
+    const battery = v.optStrictInt(b, 'battery_level', -1, 100);
+    const storage = v.optStrictInt(b, 'free_storage_bytes', 0, Number.MAX_SAFE_INTEGER);
     const resolution = v.optStr(b, 'resolution', { max: 20 });
-    const fps = v.optInt(b, 'fps', 1, 240);
-    const uploadsPending = v.optInt(b, 'uploads_pending', 0, 100_000);
-    const uploadProgress = v.optInt(b, 'upload_progress', 0, 100);
+    const fps = v.optStrictInt(b, 'fps', 1, 240);
+    const uploadsPending = v.optStrictInt(b, 'uploads_pending', 0, 100_000);
+    const uploadProgress = v.optStrictInt(b, 'upload_progress', 0, 100);
+    const liveBytes = v.optStrictInt(b, 'live_uploaded_bytes', 0, Number.MAX_SAFE_INTEGER);
     const now = ctx.now();
 
     const m = db
@@ -45,15 +46,16 @@ export function syncRoutes(app: FastifyInstance, ctx: Ctx) {
     tx(db, () => {
       db.prepare(
         `INSERT INTO device_states (device_id, camera_facing, is_recording, battery_level, free_storage_bytes, resolution, fps,
-           uploads_pending, upload_progress, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           uploads_pending, upload_progress, live_uploaded_bytes, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (device_id) DO UPDATE SET
            camera_facing = excluded.camera_facing, is_recording = excluded.is_recording,
            battery_level = excluded.battery_level, free_storage_bytes = excluded.free_storage_bytes,
            resolution = excluded.resolution, fps = excluded.fps, uploads_pending = excluded.uploads_pending,
-           upload_progress = excluded.upload_progress, updated_at = excluded.updated_at`,
+           upload_progress = excluded.upload_progress,
+           live_uploaded_bytes = excluded.live_uploaded_bytes, updated_at = excluded.updated_at`,
       ).run(deviceId, facing, isRecording ? 1 : 0, battery ?? null, storage ?? null, resolution ?? null, fps ?? null,
-        uploadsPending ?? null, uploadProgress ?? null, now);
+        uploadsPending ?? null, uploadProgress ?? null, liveBytes ?? null, now);
       db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(now, deviceId);
       if (inRoom) saveAcks(ctx, m.room_id, deviceId, b.acks);
     });

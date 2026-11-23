@@ -35,6 +35,8 @@ function render(r: Route) {
 export default function App() {
   const [stack, setStack] = useState<Route[] | null>(null);
   const [session, setSession] = useState<StoredSession | null>(null);
+  /** Tăng mỗi lần reset để màn cùng tên được dựng lại */
+  const [gen, setGen] = useState(0);
 
   const reloadSession = useCallback(async () => {
     const s = await api.getSession();
@@ -46,6 +48,7 @@ export default function App() {
     reloadSession().then((s) => setStack([s ? { name: 'home' } : { name: 'login' }]));
     return onSessionExpired(() => {
       setSession(null);
+      setGen((g) => g + 1);
       setStack([{ name: 'login', notice: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.' }]);
     });
   }, [reloadSession]);
@@ -54,7 +57,10 @@ export default function App() {
     () => ({
       push: (r) => setStack((s) => [...(s ?? []), r]),
       pop: () => setStack((s) => (s && s.length > 1 ? s.slice(0, -1) : s)),
-      reset: (r) => setStack([r]),
+      reset: (r) => {
+        setGen((g) => g + 1);
+        setStack([r]);
+      },
       session,
       reloadSession,
     }),
@@ -73,15 +79,17 @@ export default function App() {
     return () => sub.remove();
   }, [stack, nav]);
 
-  const top = stack?.[stack.length - 1];
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" />
       <NavContext.Provider value={nav}>
-        {top ? (
-          <View key={`${stack!.length}-${top.name}`} style={{ flex: 1, backgroundColor: colors.bg }}>
-            {render(top)}
-          </View>
+        {stack ? (
+          // Giữ mọi màn trong ngăn xếp (chỉ ẩn): mở màn con trong Cài đặt không làm ngắt clip đang quay hay vòng sync
+          stack.map((r, i) => (
+            <View key={`${gen}-${i}-${r.name}`} style={[{ flex: 1, backgroundColor: colors.bg }, i < stack.length - 1 && { display: 'none' }]}>
+              {render(r)}
+            </View>
+          ))
         ) : (
           <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator color={colors.accent} />

@@ -3,7 +3,7 @@ import { ApiError, isEmail, type StoredSession } from '@multicam/shared';
 import { api, browserName, clientDeviceId } from '../api.ts';
 import { CameraIcon } from '../components/Icons.tsx';
 
-export function LoginPage({ notice, onLoggedIn }: { notice: string | null; onLoggedIn: (s: StoredSession) => void }) {
+export function LoginPage({ notice, onLoggedIn, onForgot }: { notice: string | null; onLoggedIn: (s: StoredSession) => void; onForgot: () => void }) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -34,7 +34,7 @@ export function LoginPage({ notice, onLoggedIn }: { notice: string | null; onLog
       if (s) onLoggedIn(s);
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === '9995') setError({ field: 'id', text: 'Tài khoản không tồn tại' });
+        if (err.code === '9995') setError({ field: 'id', text: (err.data as { reason?: string } | null)?.reason === 'locked' ? 'Tài khoản đã bị khóa' : 'Tài khoản không tồn tại' });
         else if (err.code === '1004' && (err.data as { field?: string } | null)?.field === 'password')
           setError({ field: 'password', text: 'Sai mật khẩu' });
         else setError({ text: err.uiMessage });
@@ -81,6 +81,9 @@ export function LoginPage({ notice, onLoggedIn }: { notice: string | null; onLog
         {error && <p className="error">{error.text}</p>}
         <button className="primary" disabled={busy}>
           {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
+        </button>
+        <button type="button" className="ghost" onClick={onForgot}>
+          Quên mật khẩu?
         </button>
         <p className="hint">Tài khoản Controller do nhà phát hành cấp sẵn, không đăng ký được.</p>
       </form>

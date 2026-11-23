@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -6,8 +6,10 @@ import type { CameraFacing, DeviceCommand, RecordingState } from '@multicam/shar
 import { Button } from '../components/ui';
 import { cameraState, clock, useCommandHandler } from '../sync';
 import { colors } from '../theme';
-import { formatDuration, saveRecording } from '../video/library';
-import { kickUploads } from '../video/uploader';
+import { getPrefs, loadPrefs, qualityLabel, subscribePrefs, type Quality } from '../prefs';
+import { formatDuration, newClipId, saveRecording, updateClip } from '../video/library';
+import { cameraFilesBefore, startLiveUpload } from '../video/liveUpload';
+import { holdUpload, kickUploads, releaseUpload } from '../video/uploader';
 
 const KEEP_AWAKE_TAG = 'recorder';
 /** Máy lỡ lệnh Start: chờ thêm 1 giây sau giờ hẹn rồi mới tự bắt đầu theo trạng thái phòng. */
@@ -49,6 +51,12 @@ export function Recorder({
   const [elapsed, setElapsed] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const startedAt = useRef(0);
+  const [quality, setQuality] = useState<Quality>(getPrefs().quality);
+
+  useEffect(() => {
+    loadPrefs().then((p) => setQuality(p.quality));
+    return subscribePrefs(() => setQuality(getPrefs().quality));
+  }, []);
 
   const markReady = (v: boolean) => {
     readyRef.current = v;
@@ -59,9 +67,16 @@ export function Recorder({
     activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => undefined);
     return () => {
       deactivateKeepAwake(KEEP_AWAKE_TAG);
-      if (recordingRef.current) camera.current?.stopRecording();
     };
   }, []);
+
+  // Dọn dẹp ở layout effect: lúc này ref camera vẫn còn, ở effect thường thì đã mất
+  useLayoutEffect(
+    () => () => {
+      if (recordingRef.current) camera.current?.stopRecording();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!recording) return;
@@ -84,37 +99,58 @@ export function Recorder({
     startedAt.current = Date.now();
     const startedAtServer = clock.serverNow();
     const facingAtStart = cameraState.facing;
+    const clipId = newClipId();
+    const sessionMeta = { recordingSessionId: sessionId, startedAtServerMs: sessionId ? startedAtServer : null };
+    const started = startedAt.current;
+    const filesBefore = cameraFilesBefore();
+    holdUpload(clipId);
     setElapsed(0);
     setMessage(null);
     setRecording(true);
+    // Chức năng 8: gửi dần lên server ngay trong lúc quay
+    const live = startLiveUpload(filesBefore, { id: clipId, startedAt: started, facing: facingAtStart, ...sessionMeta });
     // iPhone: ép H.264 để file phát được trên mọi trình duyệt (HEVC không phát được trên Chrome/Windows)
     camera.current
       .recordAsync(Platform.OS === 'ios' ? { codec: 'avc1' } : {})
       .then(async (result) => {
-        const durationMs = Date.now() - startedAt.current;
+        const durationMs = Date.now() - started;
         recordingRef.current = false;
         cameraState.isRecording = false;
         setRecording(false);
         if (!result?.uri) return;
         setSaving(true);
         const clip = await saveRecording(result.uri, {
-          startedAt: startedAt.current,
+          id: clipId,
+          startedAt: started,
           durationMs,
           facing: facingAtStart,
           roomId,
-          recordingSessionId: sessionId,
-          startedAtServerMs: sessionId ? startedAtServer : null,
+          ...sessionMeta,
+          liveUploadId: null,
         });
         setMessage(`Đã lưu ${clip.file_name} · đang tải lên`);
-        kickUploads(); // dừng quay là tự upload
+        // Chờ mảnh đang gửi dở kết thúc rồi mới giao cho hàng đợi (không chặn lần quay kế tiếp)
+        live
+          .stop()
+          .then(({ uploadId }) => (uploadId ? updateClip(clipId, { upload_id: uploadId, streaming: true }) : undefined))
+          .catch(() => undefined)
+          .then(() => {
+            releaseUpload(clipId);
+            kickUploads();
+          });
       })
       .catch((e: unknown) => {
+        releaseUpload(clipId);
         setMessage(`Lỗi quay: ${e instanceof Error ? e.message : String(e)}`);
       })
       .finally(() => {
-        recordingRef.current = false;
-        cameraState.isRecording = false;
-        setRecording(false);
+        void live.stop();
+        // Lần quay mới có thể đã bắt đầu trong lúc lưu clip này → không đụng vào cờ của nó
+        if (startedAt.current === started) {
+          recordingRef.current = false;
+          cameraState.isRecording = false;
+          setRecording(false);
+        }
         setSaving(false);
       });
     return true;
@@ -202,7 +238,7 @@ export function Recorder({
     );
   }
 
-  const idleHint = controlled ? 'Chờ lệnh quay từ Controller' : `1080p · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`;
+  const idleHint = controlled ? 'Chờ lệnh quay từ Controller' : `${qualityLabel(quality)} · ${facing === 'back' ? 'Camera sau' : 'Camera trước'}`;
   return (
     <View style={st.fill}>
       <CameraView
@@ -210,7 +246,7 @@ export function Recorder({
         style={StyleSheet.absoluteFill}
         facing={facing}
         mode="video"
-        videoQuality="1080p"
+        videoQuality={quality}
         mute={false}
         onCameraReady={() => markReady(true)}
         onMountError={(e) => Alert.alert('Lỗi camera', e.message)}

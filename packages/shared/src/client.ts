@@ -227,8 +227,8 @@ export function createClient(opts: ClientOptions) {
     deleteVideo: (videoId: string) => call<{ video_id: string }>('DELETE', `/videos/${encodeURIComponent(videoId)}`),
     deleteVideosBulk: (videoIds: string[]) => call<{ deleted: string[]; not_found: string[] }>('POST', '/videos/bulk-delete', { video_ids: videoIds }),
 
-    completeUpload: (uploadId: string, thumbnailBase64?: string) =>
-      call<T.VideoInfo>('POST', `/videos/uploads/${encodeURIComponent(uploadId)}/complete`, thumbnailBase64 ? { thumbnail_base64: thumbnailBase64 } : {}),
+    completeUpload: (uploadId: string, b: T.CompleteUploadRequest = {}) =>
+      call<T.VideoInfo>('POST', `/videos/uploads/${encodeURIComponent(uploadId)}/complete`, b),
 
     // Điều khiển quay. Mã 1010 (lệnh trùng do mạng chập chờn) được coi như thành công.
     startRecording: (roomId: string, clientCommandId: string) =>

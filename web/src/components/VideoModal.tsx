@@ -12,11 +12,14 @@ export function VideoModal({
   onClose,
   onDownload,
   onDelete,
+  onGone,
 }: {
   video: LibraryVideo;
   onClose: () => void;
   onDownload: () => void;
   onDelete: () => void;
+  /** 4001: video đã bị xóa → gỡ khỏi danh sách và làm mới */
+  onGone: () => void;
 }) {
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +28,10 @@ export function VideoModal({
     api
       .getVideo(video.video_id)
       .then(setDetail)
-      .catch((e) => setError(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet'));
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === '4001') return onGone();
+        setError(e instanceof ApiError ? e.uiMessage : 'Không thể kết nối Internet');
+      });
   }, [video.video_id]);
 
   useEffect(() => {

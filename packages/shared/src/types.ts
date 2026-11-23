@@ -73,7 +73,8 @@ export type LoginRequest = Identifier & { password: string } & DeviceInfo;
 export interface TokenData {
   access_token: string;
   refresh_token: string;
-  expires_in: number;
+  /** refresh_token trả chuỗi "3600" theo đề bài; change_password trả số */
+  expires_in: number | string;
 }
 
 export type ForgotPasswordRequest = Identifier & { code_verify: string; new_password: string };
@@ -104,6 +105,8 @@ export interface DeviceState {
   uploads_pending: number;
   /** % của clip đang upload (null nếu không upload) */
   upload_progress: number | null;
+  /** Số byte đã lên server của clip ĐANG quay (null nếu không quay) */
+  live_uploaded_bytes: number | null;
   updated_at: string;
 }
 
@@ -159,6 +162,7 @@ export interface SyncDeviceRequest {
   acks?: CommandAck[];
   uploads_pending?: number;
   upload_progress?: number;
+  live_uploaded_bytes?: number;
 }
 
 export type LeftReason = 'kicked' | 'closed' | 'left' | 'logout';
@@ -246,8 +250,10 @@ export interface InitUploadRequest {
   /** UUID của clip sinh trên máy — cùng với checksum dùng để chống upload trùng (3005) */
   local_video_uid: string;
   file_name: string;
-  total_size: number;
-  checksum_sha256: string;
+  /** true = upload ngay trong lúc quay; khi đó total_size và checksum gửi ở complete_upload */
+  streaming?: boolean;
+  total_size?: number;
+  checksum_sha256?: string;
   chunk_size?: number;
   duration_ms?: number;
   recording_session_id?: string | null;
@@ -256,8 +262,19 @@ export interface InitUploadRequest {
   mime_type?: 'video/mp4' | 'video/quicktime';
 }
 
+export interface CompleteUploadRequest {
+  thumbnail_base64?: string;
+  /** Bắt buộc với phiên streaming */
+  total_size?: number;
+  checksum_sha256?: string;
+  duration_ms?: number;
+}
+
 export interface UploadStatus {
   upload_id: string;
+  streaming: '0' | '1';
+  /** SHA-256 của từng mảnh server đang giữ */
+  chunk_hashes: Record<string, string>;
   status: 'uploading' | 'completed' | 'aborted';
   total_size: number;
   chunk_size: number;

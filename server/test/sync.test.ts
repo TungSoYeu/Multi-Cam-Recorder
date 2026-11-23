@@ -67,7 +67,7 @@ test('sync_room: Controller thấy danh sách máy kèm trạng thái', async ()
   assert.equal(m.is_online, '1');
   assert.deepEqual(
     { ...m.state, updated_at: undefined },
-    { camera_facing: 'front', is_recording: '1', battery_level: 87, free_storage_bytes: 12_400_000_000, resolution: '1080p', fps: 30, uploads_pending: 0, upload_progress: null, updated_at: undefined },
+    { camera_facing: 'front', is_recording: '1', battery_level: 87, free_storage_bytes: 12_400_000_000, resolution: '1080p', fps: 30, uploads_pending: 0, upload_progress: null, live_uploaded_bytes: null, updated_at: undefined },
   );
 
   advance(16);

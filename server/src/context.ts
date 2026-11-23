@@ -2,11 +2,12 @@ import type { FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
 import type { DB } from './db/database.ts';
 import { Codes, fail } from './lib/errors.ts';
+import { verifyJwt } from './lib/jwt.ts';
 import { sha256 } from './lib/security.ts';
 
 export interface VerifyCodeSender {
   /** Gửi mã qua email/SMS. Ném lỗi nếu gửi thất bại. */
-  send(input: { target: string; channel: 'email' | 'sms'; purpose: string; code: string }): Promise<void>;
+  send(input: { target: string; purpose: string; code: string; expiresInSec: number }): Promise<void>;
 }
 
 export interface Ctx {
@@ -14,6 +15,8 @@ export interface Ctx {
   config: Config;
   now: () => number;
   sender?: VerifyCodeSender;
+  /** Hiện mã đặt lại mật khẩu của Controller trên màn hình server (không bao giờ trả qua API). */
+  showControllerCode?: (code: string) => void;
 }
 
 export interface UserRow {
@@ -41,6 +44,8 @@ export interface DeviceRow {
 
 export interface Auth {
   user: UserRow;
+  /** Claim `acc` trong access_token */
+  acc: UserRow['role'];
   sessionId: string;
   device: DeviceRow | null;
 }
@@ -51,15 +56,17 @@ const TOUCH_INTERVAL_MS = 3000;
 export function authenticate(ctx: Ctx, req: FastifyRequest): Auth {
   const m = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '');
   if (!m) return fail(Codes.TOKEN_INVALID);
+  const claims = verifyJwt(m[1], ctx.config.mediaSecret);
+  if (!claims || claims.exp * 1000 <= ctx.now()) return fail(Codes.TOKEN_INVALID);
   const s = ctx.db
     .prepare('SELECT id, user_id, device_id, access_expires_at, revoked_at FROM sessions WHERE access_hash = ?')
     .get(sha256(m[1])) as
     | { id: string; user_id: string; device_id: string | null; access_expires_at: number; revoked_at: number | null }
     | undefined;
   const now = ctx.now();
-  if (!s || s.revoked_at || s.access_expires_at <= now) return fail(Codes.TOKEN_INVALID);
+  if (!s || s.id !== claims.sid || s.user_id !== claims.sub || s.revoked_at || s.access_expires_at <= now) return fail(Codes.TOKEN_INVALID);
   const user = ctx.db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id) as UserRow | undefined;
-  if (!user || user.locked) return fail(Codes.TOKEN_INVALID);
+  if (!user || user.locked || user.role !== claims.acc) return fail(Codes.TOKEN_INVALID);
   let device: DeviceRow | null = null;
   if (s.device_id) {
     device = (ctx.db.prepare('SELECT * FROM devices WHERE id = ?').get(s.device_id) as DeviceRow | undefined) ?? null;
@@ -68,11 +75,11 @@ export function authenticate(ctx: Ctx, req: FastifyRequest): Auth {
       device.last_seen_at = now;
     }
   }
-  return { user, sessionId: s.id, device };
+  return { user, acc: claims.acc, sessionId: s.id, device };
 }
 
 export const requireRole = (auth: Auth, role: UserRow['role']) => {
-  if (auth.user.role !== role) fail(Codes.NOT_ACCESS);
+  if (auth.acc !== role) fail(Codes.NOT_ACCESS);
 };
 
 export const iso = (ms: number) => new Date(ms).toISOString();

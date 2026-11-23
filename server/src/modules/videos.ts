@@ -58,7 +58,7 @@ function mediaUrl(ctx: Ctx, req: FastifyRequest, kind: MediaKind, id: string, ui
   const exp = Math.ceil((ctx.now() / 1000 + ttlSec) / 600) * 600;
   const sig = sign(ctx, kind, id, uid, exp);
   const path = kind === 'thumb' ? `thumbs/${id}.jpg` : `videos/${id}`;
-  const host = req.headers['x-forwarded-host'] ?? req.host;
+  const host = req.host;
   return {
     url: `${req.protocol}://${host}/api/media/${path}?k=${kind}&u=${encodeURIComponent(uid)}&e=${exp}&s=${sig}`,
     expires_at: iso(exp * 1000),

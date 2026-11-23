@@ -22,14 +22,66 @@ export function normalizeServer(input: string): string {
   return s;
 }
 
+interface SavedServer {
+  url: string;
+  /** Địa chỉ mặc định lúc lưu: buổi demo mới có địa chỉ mặc định mới thì ưu tiên địa chỉ mới */
+  def: string;
+  recent: string[];
+}
+
+async function readSaved(): Promise<SavedServer | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(SERVER_KEY);
+    return raw ? (JSON.parse(raw) as SavedServer) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getServerUrl(): Promise<string> {
-  if (serverUrl === null) serverUrl = (await SecureStore.getItemAsync(SERVER_KEY)) ?? normalizeServer(DEFAULT_SERVER);
+  if (serverUrl === null) {
+    const def = normalizeServer(DEFAULT_SERVER);
+    const saved = await readSaved();
+    serverUrl = saved && (saved.def === def || !def) ? saved.url : def;
+  }
   return serverUrl;
+}
+
+const serverListeners = new Set<() => void>();
+export function onServerChange(fn: () => void) {
+  serverListeners.add(fn);
+  return () => {
+    serverListeners.delete(fn);
+  };
 }
 
 export async function setServerUrl(url: string) {
   serverUrl = normalizeServer(url);
-  await SecureStore.setItemAsync(SERVER_KEY, serverUrl);
+  serverListeners.forEach((fn) => fn());
+  const recent = [serverUrl, ...((await readSaved())?.recent ?? []).filter((u) => u !== serverUrl)].slice(0, 5);
+  await SecureStore.setItemAsync(SERVER_KEY, JSON.stringify({ url: serverUrl, def: normalizeServer(DEFAULT_SERVER), recent } satisfies SavedServer));
+}
+
+/** Các máy chủ để chọn: mặc định của buổi demo + những địa chỉ đã dùng. */
+export async function listServers(): Promise<string[]> {
+  const all = [await getServerUrl(), normalizeServer(DEFAULT_SERVER), ...((await readSaved())?.recent ?? [])];
+  return [...new Set(all.filter(Boolean))];
+}
+
+/** Độ trễ tới máy chủ (ms), null nếu không kết nối được. */
+export async function pingServer(url: string): Promise<number | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const t = Date.now();
+    const res = await fetch(`${url}/health`, { signal: ctrl.signal });
+    const json = (await res.json()) as { code?: string };
+    return json.code === '1000' ? Date.now() - t : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Thông tin thiết bị gửi trong login: UUID sinh ở client lần đầu chạy. */
