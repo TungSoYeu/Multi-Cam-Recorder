@@ -120,3 +120,4 @@ Test server chạy với CSDL trong bộ nhớ. Test của app chạy chính ph�
 
 - [docs/API.md](docs/API.md): 28 API của đề và 2 API thêm
 - [docs/DATABASE.md](docs/DATABASE.md): sơ đồ và mô tả các bảng
+- [CONTRIBUTING.md](CONTRIBUTING.md): cách chia nhánh và gửi thay đổi
